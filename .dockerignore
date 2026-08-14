@@ -1,0 +1,9 @@
+node_modules
+dist
+server/data
+.git
+.github
+.env
+.env.local
+bun.lock
+README.md
