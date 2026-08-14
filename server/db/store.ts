@@ -1,0 +1,671 @@
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+
+const DATA_DIR = path.join(process.cwd(), 'server', 'data');
+const DB_FILE = path.join(DATA_DIR, 'pos_db.json');
+
+// Ensure directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+export interface InMemoryDB {
+  branches: any[];
+  roles: any[];
+  permissions: any[];
+  role_permissions: any[];
+  users: any[];
+  user_branches: any[];
+  ingredients: any[];
+  unit_conversions: any[];
+  product_categories: any[];
+  products: any[];
+  product_variants: any[];
+  product_modifiers: any[];
+  product_recipes: any[];
+  branch_product_prices: any[];
+  stock_branch: any[];
+  stock_movements: any[];
+  stock_opnames: any[];
+  stock_transfers: any[];
+  suppliers: any[];
+  purchase_orders: any[];
+  goods_receipts: any[];
+  dining_tables: any[];
+  shifts: any[];
+  shift_cash_records: any[];
+  attendances: any[];
+  members: any[];
+  member_point_logs: any[];
+  promotions: any[];
+  orders: any[];
+  transactions: any[];
+  chart_of_accounts: any[];
+  journal_entries: any[];
+  audit_logs: any[];
+}
+
+const initialSeedData: InMemoryDB = {
+  branches: [
+    {
+      id: 'branch-1',
+      code: 'JKT-01',
+      name: 'Kopi Nusantara - Menteng Flagship',
+      address: 'Jl. Teuku Cik Ditiro No. 42, Menteng, Jakarta Pusat',
+      phone: '021-31908888',
+      email: 'menteng@kopinusantara.id',
+      operating_hours: '07:00 - 22:00',
+      tax_percentage: 11.0,
+      service_charge_percentage: 5.0,
+      is_tax_inclusive: false,
+      auto_print_kitchen: true,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 'branch-2',
+      code: 'BDG-01',
+      name: 'Kopi Nusantara - Dago Heritage',
+      address: 'Jl. Ir. H. Juanda No. 108, Dago, Bandung',
+      phone: '022-2501234',
+      email: 'dago@kopinusantara.id',
+      operating_hours: '08:00 - 23:00',
+      tax_percentage: 11.0,
+      service_charge_percentage: 0.0,
+      is_tax_inclusive: false,
+      auto_print_kitchen: true,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 'branch-3',
+      code: 'SBY-01',
+      name: 'Kopi Nusantara - Gubeng Point',
+      address: 'Jl. Pemuda No. 33, Gubeng, Surabaya',
+      phone: '031-5345678',
+      email: 'gubeng@kopinusantara.id',
+      operating_hours: '08:00 - 22:00',
+      tax_percentage: 11.0,
+      service_charge_percentage: 0.0,
+      is_tax_inclusive: false,
+      auto_print_kitchen: true,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    },
+  ],
+  roles: [
+    { id: 'owner', name: 'Owner / Direksi', description: 'Akses penuh seluruh cabang & laporan keuangan' },
+    { id: 'manager', name: 'Manajer Cabang', description: 'Kelola operasional, stok, PO, dan approval cabang' },
+    { id: 'cashier', name: 'Kasir', description: 'Operasional POS, transaksi penjualan, dan kas laci' },
+    { id: 'kitchen_food', name: 'Dapur Makanan', description: 'Kitchen Display System untuk menu makanan' },
+    { id: 'kitchen_beverage', name: 'Dapur Minuman / Bar', description: 'Kitchen Display System untuk menu minuman/bar' },
+  ],
+  permissions: [
+    { id: 'pos.access', module: 'POS', action: 'access', description: 'Akses layar kasir penjualan' },
+    { id: 'pos.discount', module: 'POS', action: 'apply_discount', description: 'Terapkan diskon manual' },
+    { id: 'pos.void', module: 'POS', action: 'void_transaction', description: 'Void / batalkan transaksi' },
+    { id: 'shift.manage', module: 'Shift', action: 'manage', description: 'Buka dan tutup shift kasir' },
+    { id: 'stock.view', module: 'Stock', action: 'view', description: 'Lihat stok dan kartu stok' },
+    { id: 'stock.opname', module: 'Stock', action: 'opname', description: 'Input dan approve stok opname' },
+    { id: 'stock.transfer', module: 'Stock', action: 'transfer', description: 'Transfer stok antar cabang' },
+    { id: 'purchase.create', module: 'Purchase', action: 'create', description: 'Buat Purchase Order' },
+    { id: 'purchase.approve', module: 'Purchase', action: 'approve', description: 'Approval Purchase Order' },
+    { id: 'accounting.view', module: 'Accounting', action: 'view', description: 'Lihat laporan keuangan & jurnal' },
+    { id: 'reports.export', module: 'Reports', action: 'export', description: 'Export laporan ke Excel/PDF' },
+    { id: 'kds.food', module: 'KDS', action: 'food_station', description: 'Akses layar KDS makanan' },
+    { id: 'kds.beverage', module: 'KDS', action: 'beverage_station', description: 'Akses layar KDS minuman' },
+    { id: 'settings.manage', module: 'Settings', action: 'manage', description: 'Kelola data cabang, user, dan role' },
+  ],
+  role_permissions: [
+    { role_id: 'owner', permission_id: 'pos.access' },
+    { role_id: 'owner', permission_id: 'pos.discount' },
+    { role_id: 'owner', permission_id: 'pos.void' },
+    { role_id: 'owner', permission_id: 'shift.manage' },
+    { role_id: 'owner', permission_id: 'stock.view' },
+    { role_id: 'owner', permission_id: 'stock.opname' },
+    { role_id: 'owner', permission_id: 'stock.transfer' },
+    { role_id: 'owner', permission_id: 'purchase.create' },
+    { role_id: 'owner', permission_id: 'purchase.approve' },
+    { role_id: 'owner', permission_id: 'accounting.view' },
+    { role_id: 'owner', permission_id: 'reports.export' },
+    { role_id: 'owner', permission_id: 'kds.food' },
+    { role_id: 'owner', permission_id: 'kds.beverage' },
+    { role_id: 'owner', permission_id: 'settings.manage' },
+    { role_id: 'manager', permission_id: 'pos.access' },
+    { role_id: 'manager', permission_id: 'pos.discount' },
+    { role_id: 'manager', permission_id: 'pos.void' },
+    { role_id: 'manager', permission_id: 'shift.manage' },
+    { role_id: 'manager', permission_id: 'stock.view' },
+    { role_id: 'manager', permission_id: 'stock.opname' },
+    { role_id: 'manager', permission_id: 'stock.transfer' },
+    { role_id: 'manager', permission_id: 'purchase.create' },
+    { role_id: 'manager', permission_id: 'purchase.approve' },
+    { role_id: 'manager', permission_id: 'accounting.view' },
+    { role_id: 'manager', permission_id: 'reports.export' },
+    { role_id: 'cashier', permission_id: 'pos.access' },
+    { role_id: 'cashier', permission_id: 'shift.manage' },
+    { role_id: 'cashier', permission_id: 'stock.view' },
+    { role_id: 'kitchen_food', permission_id: 'kds.food' },
+    { role_id: 'kitchen_beverage', permission_id: 'kds.beverage' },
+  ],
+  users: [
+    {
+      id: 'user-owner',
+      username: 'owner',
+      password_hash: '123456',
+      full_name: 'Budi Santoso (Owner)',
+      email: 'budi@kopinusantara.id',
+      phone: '081122334455',
+      role_id: 'owner',
+      is_active: true,
+      branch_ids: ['branch-1', 'branch-2', 'branch-3'],
+    },
+    {
+      id: 'user-mgr-jkt',
+      username: 'manager_jkt',
+      password_hash: '123456',
+      full_name: 'Siti Rahma (Manager Menteng)',
+      email: 'siti@kopinusantara.id',
+      phone: '081234567890',
+      role_id: 'manager',
+      is_active: true,
+      branch_ids: ['branch-1'],
+    },
+    {
+      id: 'user-cashier-jkt',
+      username: 'cashier_jkt',
+      password_hash: '123456',
+      full_name: 'Dimas Aditya (Kasir Menteng)',
+      email: 'dimas@kopinusantara.id',
+      phone: '081399887766',
+      role_id: 'cashier',
+      is_active: true,
+      branch_ids: ['branch-1'],
+    },
+    {
+      id: 'user-kds-food',
+      username: 'kitchen_food',
+      password_hash: '123456',
+      full_name: 'Chef Hendra (Dapur Makanan)',
+      email: 'hendra@kopinusantara.id',
+      phone: '081512341234',
+      role_id: 'kitchen_food',
+      is_active: true,
+      branch_ids: ['branch-1', 'branch-2', 'branch-3'],
+    },
+    {
+      id: 'user-kds-bev',
+      username: 'kitchen_bev',
+      password_hash: '123456',
+      full_name: 'Barista Rio (Bar Minuman)',
+      email: 'rio@kopinusantara.id',
+      phone: '081798765432',
+      role_id: 'kitchen_beverage',
+      is_active: true,
+      branch_ids: ['branch-1', 'branch-2', 'branch-3'],
+    },
+  ],
+  user_branches: [
+    { user_id: 'user-owner', branch_id: 'branch-1' },
+    { user_id: 'user-owner', branch_id: 'branch-2' },
+    { user_id: 'user-owner', branch_id: 'branch-3' },
+    { user_id: 'user-mgr-jkt', branch_id: 'branch-1' },
+    { user_id: 'user-cashier-jkt', branch_id: 'branch-1' },
+    { user_id: 'user-kds-food', branch_id: 'branch-1' },
+    { user_id: 'user-kds-bev', branch_id: 'branch-1' },
+  ],
+  ingredients: [
+    { id: 'ing-coffee-gayo', code: 'ING-001', name: 'Biji Kopi Arabika Gayo Specialty', category: 'Kopi', base_unit: 'gram', cost_per_unit: 180, min_stock_alert: 1000 },
+    { id: 'ing-coffee-dampit', code: 'ING-002', name: 'Biji Kopi Robusta Dampit Fine', category: 'Kopi', base_unit: 'gram', cost_per_unit: 90, min_stock_alert: 1000 },
+    { id: 'ing-milk-fresh', code: 'ING-003', name: 'Susu Fresh Milk Pasteurisasi', category: 'Susu', base_unit: 'ml', cost_per_unit: 22, min_stock_alert: 5000 },
+    { id: 'ing-milk-oat', code: 'ING-004', name: 'Susu Oat Milk Barista Edition', category: 'Susu', base_unit: 'ml', cost_per_unit: 45, min_stock_alert: 2000 },
+    { id: 'ing-sugar-aren', code: 'ING-005', name: 'Gula Aren Cair Organik Premium', category: 'Sirup & Gula', base_unit: 'ml', cost_per_unit: 35, min_stock_alert: 2000 },
+    { id: 'ing-tea-jasmine', code: 'ING-006', name: 'Daun Teh Melati Jasmine Premium', category: 'Teh', base_unit: 'gram', cost_per_unit: 120, min_stock_alert: 500 },
+    { id: 'ing-ice', code: 'ING-007', name: 'Es Batu Kristal Higienis', category: 'Es', base_unit: 'gram', cost_per_unit: 2, min_stock_alert: 10000 },
+    { id: 'ing-rice', code: 'ING-008', name: 'Beras Pandan Wangi Pulen', category: 'Bahan Makanan', base_unit: 'gram', cost_per_unit: 16, min_stock_alert: 5000 },
+    { id: 'ing-chicken', code: 'ING-009', name: 'Daging Ayam Fillet Segar', category: 'Bahan Makanan', base_unit: 'gram', cost_per_unit: 55, min_stock_alert: 3000 },
+    { id: 'ing-egg', code: 'ING-010', name: 'Telur Ayam Negeri Segar', category: 'Bahan Makanan', base_unit: 'pcs', cost_per_unit: 2000, min_stock_alert: 50 },
+    { id: 'ing-cup-16oz', code: 'ING-011', name: 'Cup Cold PET 16oz + Tutup Seal', category: 'Kemasan', base_unit: 'pcs', cost_per_unit: 800, min_stock_alert: 200 },
+    { id: 'ing-straw-paper', code: 'ING-012', name: 'Sedotan Kertas Steril', category: 'Kemasan', base_unit: 'pcs', cost_per_unit: 150, min_stock_alert: 200 },
+    { id: 'ing-bag-biodegradable', code: 'ING-013', name: 'Kantong Ramah Lingkungan Singkong', category: 'Kemasan', base_unit: 'pcs', cost_per_unit: 400, min_stock_alert: 150 },
+  ],
+  unit_conversions: [
+    { id: 'conv-1', from_unit: 'kg', to_unit: 'gram', multiplier: 1000, description: '1 Kilogram = 1000 Gram' },
+    { id: 'conv-2', from_unit: 'liter', to_unit: 'ml', multiplier: 1000, description: '1 Liter = 1000 Milliliter' },
+    { id: 'conv-3', from_unit: 'dus', to_unit: 'pcs', multiplier: 24, description: '1 Dus = 24 Pieces' },
+    { id: 'conv-4', from_unit: 'bal', to_unit: 'pcs', multiplier: 50, description: '1 Bal Kemasan = 50 Pieces' },
+  ],
+  product_categories: [
+    { id: 'cat-coffee', name: 'Kopi & Espresso', slug: 'coffee', kitchen_station: 'beverage', icon: 'Coffee', sort_order: 1 },
+    { id: 'cat-non-coffee', name: 'Teh & Non-Kopi', slug: 'non-coffee', kitchen_station: 'beverage', icon: 'CupSoda', sort_order: 2 },
+    { id: 'cat-food', name: 'Makanan Utama', slug: 'main-dish', kitchen_station: 'food', icon: 'Utensils', sort_order: 3 },
+    { id: 'cat-snack', name: 'Snack & Gorengan', slug: 'snacks', kitchen_station: 'food', icon: 'Cookie', sort_order: 4 },
+    { id: 'cat-pastry', name: 'Pastry & Dessert', slug: 'pastry', kitchen_station: 'dessert', icon: 'Cake', sort_order: 5 },
+  ],
+  products: [
+    {
+      id: 'prod-kopisusu',
+      code: 'PRD-001',
+      name: 'Es Kopi Susu Gula Aren',
+      category_id: 'cat-coffee',
+      description: 'Signature espresso robusta dampit, susu segar, dan gula aren organik khas Nusantara.',
+      image_url: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=500&auto=format&fit=crop&q=60',
+      base_price: 22000,
+      cost_price: 7420,
+      is_recipe_based: true,
+      has_variants: true,
+      is_available: true,
+      track_stock: true,
+    },
+    {
+      id: 'prod-cappuccino',
+      code: 'PRD-002',
+      name: 'Artisan Cappuccino',
+      category_id: 'cat-coffee',
+      description: 'Single origin Arabika Gayo dengan steamed fresh milk bertekstur microfoam lembut.',
+      image_url: 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=500&auto=format&fit=crop&q=60',
+      base_price: 32000,
+      cost_price: 7200,
+      is_recipe_based: true,
+      has_variants: true,
+      is_available: true,
+      track_stock: true,
+    },
+    {
+      id: 'prod-estehmanis',
+      code: 'PRD-003',
+      name: 'Es Teh Manis Jasmine',
+      category_id: 'cat-non-coffee',
+      description: 'Seduhan daun teh melati asli dengan gula aren wangi dan es kristal segar.',
+      image_url: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&auto=format&fit=crop&q=60',
+      base_price: 12000,
+      cost_price: 2475,
+      is_recipe_based: true,
+      has_variants: false,
+      is_available: true,
+      track_stock: true,
+    },
+    {
+      id: 'prod-nasigoreng',
+      code: 'PRD-004',
+      name: 'Nasi Goreng Kampung Spesial',
+      category_id: 'cat-food',
+      description: 'Nasi goreng bumbu rempah tradisional dengan suwiran ayam, telur mata sapi, dan kerupuk.',
+      image_url: 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=500&auto=format&fit=crop&q=60',
+      base_price: 38000,
+      cost_price: 11900,
+      is_recipe_based: true,
+      has_variants: false,
+      is_available: true,
+      track_stock: true,
+    },
+    {
+      id: 'prod-ayamgeprek',
+      code: 'PRD-005',
+      name: 'Ayam Crispy Sambal Korek + Nasi',
+      category_id: 'cat-food',
+      description: 'Ayam fillet goreng tepung renyah dengan ulekan cabai rawit pedas mantap dan nasi hangat.',
+      image_url: 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=500&auto=format&fit=crop&q=60',
+      base_price: 35000,
+      cost_price: 12650,
+      is_recipe_based: true,
+      has_variants: false,
+      is_available: true,
+      track_stock: true,
+    },
+    {
+      id: 'prod-croissant',
+      code: 'PRD-006',
+      name: 'Butter Croissant Premium',
+      category_id: 'cat-pastry',
+      description: 'French butter croissant berlapis renyah dan lembut harum.',
+      image_url: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500&auto=format&fit=crop&q=60',
+      base_price: 25000,
+      cost_price: 12000,
+      is_recipe_based: false, // Simple product tanpa resep rumit
+      has_variants: false,
+      is_available: true,
+      track_stock: true,
+    },
+    {
+      id: 'prod-airmineral',
+      code: 'PRD-007',
+      name: 'Air Mineral Prima 600ml',
+      category_id: 'cat-non-coffee',
+      description: 'Air mineral murni dalam kemasan botol higienis.',
+      image_url: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=500&auto=format&fit=crop&q=60',
+      base_price: 8000,
+      cost_price: 3500,
+      is_recipe_based: false,
+      has_variants: false,
+      is_available: true,
+      track_stock: true,
+    },
+  ],
+  product_variants: [
+    { id: 'var-kopi-reg', product_id: 'prod-kopisusu', name: 'Reguler (16oz)', additional_price: 0, recipe_multiplier: 1.0, sku: 'KOP-REG' },
+    { id: 'var-kopi-lrg', product_id: 'prod-kopisusu', name: 'Large (22oz)', additional_price: 6000, recipe_multiplier: 1.4, sku: 'KOP-LRG' },
+    { id: 'var-cap-hot', product_id: 'prod-cappuccino', name: 'Hot (8oz)', additional_price: 0, recipe_multiplier: 1.0, sku: 'CAP-HOT' },
+    { id: 'var-cap-iced', product_id: 'prod-cappuccino', name: 'Iced (16oz)', additional_price: 3000, recipe_multiplier: 1.2, sku: 'CAP-ICED' },
+  ],
+  product_modifiers: [
+    { id: 'mod-extra-shot', name: 'Extra Espresso Shot', category: 'Kopi', price: 8000, ingredient_id: 'ing-coffee-gayo', ingredient_qty: 10 },
+    { id: 'mod-oat-milk', name: 'Ganti Susu Oat Milk', category: 'Susu', price: 8000, ingredient_id: 'ing-milk-oat', ingredient_qty: 120 },
+    { id: 'mod-less-sugar', name: 'Less Sugar (50%)', category: 'Level Gula', price: 0, ingredient_id: 'ing-sugar-aren', ingredient_qty: -10 },
+    { id: 'mod-extra-egg', name: 'Extra Telur Mata Sapi', category: 'Topping Makanan', price: 6000, ingredient_id: 'ing-egg', ingredient_qty: 1 },
+  ],
+  product_recipes: [
+    // Es Kopi Susu Gula Aren
+    { id: 'rec-1', product_id: 'prod-kopisusu', variant_id: null, ingredient_id: 'ing-coffee-dampit', quantity: 18, cost_share: 1620 },
+    { id: 'rec-2', product_id: 'prod-kopisusu', variant_id: null, ingredient_id: 'ing-milk-fresh', quantity: 120, cost_share: 2640 },
+    { id: 'rec-3', product_id: 'prod-kopisusu', variant_id: null, ingredient_id: 'ing-sugar-aren', quantity: 25, cost_share: 875 },
+    { id: 'rec-4', product_id: 'prod-kopisusu', variant_id: null, ingredient_id: 'ing-ice', quantity: 120, cost_share: 240 },
+    { id: 'rec-5', product_id: 'prod-kopisusu', variant_id: null, ingredient_id: 'ing-cup-16oz', quantity: 1, cost_share: 800 },
+    { id: 'rec-6', product_id: 'prod-kopisusu', variant_id: null, ingredient_id: 'ing-straw-paper', quantity: 1, cost_share: 150 },
+    // Artisan Cappuccino
+    { id: 'rec-7', product_id: 'prod-cappuccino', variant_id: null, ingredient_id: 'ing-coffee-gayo', quantity: 18, cost_share: 3240 },
+    { id: 'rec-8', product_id: 'prod-cappuccino', variant_id: null, ingredient_id: 'ing-milk-fresh', quantity: 180, cost_share: 3960 },
+    // Es Teh Manis Jasmine
+    { id: 'rec-9', product_id: 'prod-estehmanis', variant_id: null, ingredient_id: 'ing-tea-jasmine', quantity: 5, cost_share: 600 },
+    { id: 'rec-10', product_id: 'prod-estehmanis', variant_id: null, ingredient_id: 'ing-sugar-aren', quantity: 20, cost_share: 700 },
+    { id: 'rec-11', product_id: 'prod-estehmanis', variant_id: null, ingredient_id: 'ing-ice', quantity: 100, cost_share: 200 },
+    { id: 'rec-12', product_id: 'prod-estehmanis', variant_id: null, ingredient_id: 'ing-cup-16oz', quantity: 1, cost_share: 800 },
+    { id: 'rec-13', product_id: 'prod-estehmanis', variant_id: null, ingredient_id: 'ing-straw-paper', quantity: 1, cost_share: 150 },
+    // Nasi Goreng Kampung
+    { id: 'rec-14', product_id: 'prod-nasigoreng', variant_id: null, ingredient_id: 'ing-rice', quantity: 150, cost_share: 2400 },
+    { id: 'rec-15', product_id: 'prod-nasigoreng', variant_id: null, ingredient_id: 'ing-chicken', quantity: 100, cost_share: 5500 },
+    { id: 'rec-16', product_id: 'prod-nasigoreng', variant_id: null, ingredient_id: 'ing-egg', quantity: 2, cost_share: 4000 },
+    // Ayam Geprek + Nasi
+    { id: 'rec-17', product_id: 'prod-ayamgeprek', variant_id: null, ingredient_id: 'ing-chicken', quantity: 150, cost_share: 8250 },
+    { id: 'rec-18', product_id: 'prod-ayamgeprek', variant_id: null, ingredient_id: 'ing-rice', quantity: 150, cost_share: 2400 },
+    { id: 'rec-19', product_id: 'prod-ayamgeprek', variant_id: null, ingredient_id: 'ing-egg', quantity: 1, cost_share: 2000 },
+  ],
+  branch_product_prices: [],
+  stock_branch: [
+    // Branch 1 (Menteng)
+    { id: 'stk-b1-1', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-coffee-gayo', current_stock: 4500, min_stock_alert: 1000 },
+    { id: 'stk-b1-2', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-coffee-dampit', current_stock: 8200, min_stock_alert: 1000 },
+    { id: 'stk-b1-3', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-milk-fresh', current_stock: 24000, min_stock_alert: 5000 },
+    { id: 'stk-b1-4', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-milk-oat', current_stock: 6000, min_stock_alert: 2000 },
+    { id: 'stk-b1-5', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-sugar-aren', current_stock: 12000, min_stock_alert: 2000 },
+    { id: 'stk-b1-6', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-tea-jasmine', current_stock: 1800, min_stock_alert: 500 },
+    { id: 'stk-b1-7', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-ice', current_stock: 50000, min_stock_alert: 10000 },
+    { id: 'stk-b1-8', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-rice', current_stock: 25000, min_stock_alert: 5000 },
+    { id: 'stk-b1-9', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-chicken', current_stock: 12000, min_stock_alert: 3000 },
+    { id: 'stk-b1-10', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-egg', current_stock: 180, min_stock_alert: 50 },
+    { id: 'stk-b1-11', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-cup-16oz', current_stock: 850, min_stock_alert: 200 },
+    { id: 'stk-b1-12', branch_id: 'branch-1', item_type: 'ingredient', item_id: 'ing-straw-paper', current_stock: 900, min_stock_alert: 200 },
+    { id: 'stk-b1-13', branch_id: 'branch-1', item_type: 'product', item_id: 'prod-croissant', current_stock: 35, min_stock_alert: 10 },
+    { id: 'stk-b1-14', branch_id: 'branch-1', item_type: 'product', item_id: 'prod-airmineral', current_stock: 72, min_stock_alert: 24 },
+
+    // Branch 2 (Bandung)
+    { id: 'stk-b2-1', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-coffee-gayo', current_stock: 3200, min_stock_alert: 1000 },
+    { id: 'stk-b2-2', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-coffee-dampit', current_stock: 6000, min_stock_alert: 1000 },
+    { id: 'stk-b2-3', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-milk-fresh', current_stock: 18000, min_stock_alert: 5000 },
+    { id: 'stk-b2-4', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-milk-oat', current_stock: 4000, min_stock_alert: 2000 },
+    { id: 'stk-b2-5', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-sugar-aren', current_stock: 8000, min_stock_alert: 2000 },
+    { id: 'stk-b2-6', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-tea-jasmine', current_stock: 1200, min_stock_alert: 500 },
+    { id: 'stk-b2-7', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-ice', current_stock: 35000, min_stock_alert: 10000 },
+    { id: 'stk-b2-8', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-rice', current_stock: 18000, min_stock_alert: 5000 },
+    { id: 'stk-b2-9', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-chicken', current_stock: 8000, min_stock_alert: 3000 },
+    { id: 'stk-b2-10', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-egg', current_stock: 120, min_stock_alert: 50 },
+    { id: 'stk-b2-11', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-cup-16oz', current_stock: 600, min_stock_alert: 200 },
+    { id: 'stk-b2-12', branch_id: 'branch-2', item_type: 'ingredient', item_id: 'ing-straw-paper', current_stock: 650, min_stock_alert: 200 },
+    { id: 'stk-b2-13', branch_id: 'branch-2', item_type: 'product', item_id: 'prod-croissant', current_stock: 20, min_stock_alert: 10 },
+    { id: 'stk-b2-14', branch_id: 'branch-2', item_type: 'product', item_id: 'prod-airmineral', current_stock: 48, min_stock_alert: 24 },
+
+    // Branch 3 (Surabaya)
+    { id: 'stk-b3-1', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-coffee-gayo', current_stock: 2800, min_stock_alert: 1000 },
+    { id: 'stk-b3-2', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-coffee-dampit', current_stock: 5500, min_stock_alert: 1000 },
+    { id: 'stk-b3-3', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-milk-fresh', current_stock: 15000, min_stock_alert: 5000 },
+    { id: 'stk-b3-4', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-milk-oat', current_stock: 3000, min_stock_alert: 2000 },
+    { id: 'stk-b3-5', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-sugar-aren', current_stock: 7500, min_stock_alert: 2000 },
+    { id: 'stk-b3-6', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-tea-jasmine', current_stock: 900, min_stock_alert: 500 },
+    { id: 'stk-b3-7', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-ice', current_stock: 30000, min_stock_alert: 10000 },
+    { id: 'stk-b3-8', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-rice', current_stock: 15000, min_stock_alert: 5000 },
+    { id: 'stk-b3-9', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-chicken', current_stock: 7000, min_stock_alert: 3000 },
+    { id: 'stk-b3-10', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-egg', current_stock: 90, min_stock_alert: 50 },
+    { id: 'stk-b3-11', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-cup-16oz', current_stock: 450, min_stock_alert: 200 },
+    { id: 'stk-b3-12', branch_id: 'branch-3', item_type: 'ingredient', item_id: 'ing-straw-paper', current_stock: 500, min_stock_alert: 200 },
+    { id: 'stk-b3-13', branch_id: 'branch-3', item_type: 'product', item_id: 'prod-croissant', current_stock: 15, min_stock_alert: 10 },
+    { id: 'stk-b3-14', branch_id: 'branch-3', item_type: 'product', item_id: 'prod-airmineral', current_stock: 36, min_stock_alert: 24 },
+  ],
+  stock_movements: [
+    {
+      id: 'mov-init-1',
+      branch_id: 'branch-1',
+      item_type: 'ingredient',
+      item_id: 'ing-coffee-gayo',
+      movement_type: 'purchase',
+      quantity: 5000,
+      unit: 'gram',
+      unit_cost: 180,
+      total_cost: 900000,
+      reference_id: 'PO-2026-001',
+      notes: 'Penerimaan PO Pembelian Biji Kopi Gayo',
+      created_by: 'user-mgr-jkt',
+      created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    },
+    {
+      id: 'mov-init-2',
+      branch_id: 'branch-1',
+      item_type: 'ingredient',
+      item_id: 'ing-milk-fresh',
+      movement_type: 'purchase',
+      quantity: 30000,
+      unit: 'ml',
+      unit_cost: 22,
+      total_cost: 660000,
+      reference_id: 'PO-2026-002',
+      notes: 'Penerimaan PO Susu Fresh Milk',
+      created_by: 'user-mgr-jkt',
+      created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    },
+  ],
+  stock_opnames: [],
+  stock_transfers: [],
+  suppliers: [
+    { id: 'sup-1', name: 'PT Gayo Kopi Makmur', contact_person: 'Pak Faisal', phone: '081299881122', email: 'sales@gayokopi.com', address: 'Takengon, Aceh Tengah', payment_terms_days: 30 },
+    { id: 'sup-2', name: 'CV Susu Sejahtera Mandiri', contact_person: 'Ibu Lilis', phone: '081344556677', email: 'order@sususejahtera.co.id', address: 'Lembang, Bandung Barat', payment_terms_days: 14 },
+    { id: 'sup-3', name: 'PT Kemasan Nusantara Pack', contact_person: 'Hendra Tan', phone: '081822339900', email: 'info@nusantarapack.id', address: 'Cikarang, Bekasi', payment_terms_days: 30 },
+    { id: 'sup-4', name: 'Toko Bahan Pangan Berkah', contact_person: 'Haji Mansur', phone: '081566778899', email: 'berkahpangan@gmail.com', address: 'Pasar Induk Kramat Jati, Jakarta', payment_terms_days: 7 },
+  ],
+  purchase_orders: [
+    {
+      id: 'po-001',
+      branch_id: 'branch-1',
+      supplier_id: 'sup-1',
+      po_number: 'PO-2026-001',
+      status: 'received_full',
+      subtotal: 900000,
+      tax_amount: 99000,
+      total_amount: 999000,
+      payment_status: 'paid',
+      notes: 'Pengadaan Biji Kopi Gayo 5 Kg',
+      created_by: 'user-mgr-jkt',
+      approved_by: 'user-owner',
+      approved_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+      due_date: '2026-09-15',
+      created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+      items: [
+        { id: 'poi-1', po_id: 'po-001', item_type: 'ingredient', item_id: 'ing-coffee-gayo', item_name: 'Biji Kopi Arabika Gayo Specialty', quantity_ordered: 5000, quantity_received: 5000, unit: 'gram', unit_price: 180, total_price: 900000 },
+      ],
+    },
+  ],
+  goods_receipts: [],
+  dining_tables: [
+    { id: 'tbl-jkt-1', branch_id: 'branch-1', table_number: '01', zone: 'Indoor Utama', capacity: 4, qr_token: 'TABLE-JKT-01', order_mode: 'can_order', payment_flow: 'pay_at_cashier', is_active: true },
+    { id: 'tbl-jkt-2', branch_id: 'branch-1', table_number: '02', zone: 'Indoor Utama', capacity: 4, qr_token: 'TABLE-JKT-02', order_mode: 'can_order', payment_flow: 'pay_at_cashier', is_active: true },
+    { id: 'tbl-jkt-3', branch_id: 'branch-1', table_number: '03', zone: 'Indoor Sofa', capacity: 6, qr_token: 'TABLE-JKT-03', order_mode: 'can_order', payment_flow: 'pay_online_qris', is_active: true },
+    { id: 'tbl-jkt-4', branch_id: 'branch-1', table_number: '04', zone: 'Outdoor Smoking', capacity: 4, qr_token: 'TABLE-JKT-04', order_mode: 'can_order', payment_flow: 'pay_online_qris', is_active: true },
+    { id: 'tbl-jkt-5', branch_id: 'branch-1', table_number: '05', zone: 'Outdoor Smoking', capacity: 2, qr_token: 'TABLE-JKT-05', order_mode: 'can_order', payment_flow: 'pay_at_cashier', is_active: true },
+    { id: 'tbl-jkt-6', branch_id: 'branch-1', table_number: '06', zone: 'Lantai 2 Mezzanine', capacity: 4, qr_token: 'TABLE-JKT-06', order_mode: 'can_order', payment_flow: 'pay_online_qris', is_active: true },
+    { id: 'tbl-jkt-7', branch_id: 'branch-1', table_number: '07', zone: 'Lantai 2 Mezzanine', capacity: 8, qr_token: 'TABLE-JKT-07', order_mode: 'can_order', payment_flow: 'pay_at_cashier', is_active: true },
+    { id: 'tbl-jkt-8', branch_id: 'branch-1', table_number: 'VIP', zone: 'VIP Room', capacity: 10, qr_token: 'TABLE-JKT-VIP', order_mode: 'menu_only', payment_flow: 'pay_at_cashier', is_active: true },
+    // Bandung tables
+    { id: 'tbl-bdg-1', branch_id: 'branch-2', table_number: 'B01', zone: 'Garden Area', capacity: 4, qr_token: 'TABLE-BDG-01', order_mode: 'can_order', payment_flow: 'pay_at_cashier', is_active: true },
+    { id: 'tbl-bdg-2', branch_id: 'branch-2', table_number: 'B02', zone: 'Indoor Heritage', capacity: 4, qr_token: 'TABLE-BDG-02', order_mode: 'can_order', payment_flow: 'pay_online_qris', is_active: true },
+    { id: 'tbl-bdg-3', branch_id: 'branch-2', table_number: 'B03', zone: 'Indoor Heritage', capacity: 6, qr_token: 'TABLE-BDG-03', order_mode: 'can_order', payment_flow: 'pay_at_cashier', is_active: true },
+  ],
+  shifts: [
+    {
+      id: 'shift-active-1',
+      branch_id: 'branch-1',
+      user_id: 'user-cashier-jkt',
+      pos_terminal_name: 'Kasir Utama 01',
+      start_time: new Date(Date.now() - 3600000 * 4).toISOString(),
+      opening_cash: 500000,
+      expected_cash: 500000,
+      actual_cash: undefined,
+      total_cash_sales: 0,
+      total_non_cash_sales: 0,
+      total_petty_cash_out: 0,
+      status: 'open',
+      closing_notes: '',
+    },
+  ],
+  shift_cash_records: [],
+  attendances: [
+    {
+      id: 'att-1',
+      user_id: 'user-cashier-jkt',
+      branch_id: 'branch-1',
+      date: new Date().toISOString().split('T')[0],
+      clock_in: new Date(Date.now() - 3600000 * 4.2).toISOString(),
+      shift_schedule: 'Pagi (08:00 - 16:00)',
+      is_late: false,
+      late_minutes: 0,
+      photo_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=60',
+      latitude: -6.1954,
+      longitude: 106.8402,
+      notes: 'Tepat waktu',
+    },
+    {
+      id: 'att-2',
+      user_id: 'user-mgr-jkt',
+      branch_id: 'branch-1',
+      date: new Date().toISOString().split('T')[0],
+      clock_in: new Date(Date.now() - 3600000 * 5).toISOString(),
+      shift_schedule: 'Full Shift (07:30 - 17:00)',
+      is_late: false,
+      late_minutes: 0,
+      photo_url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=60',
+      latitude: -6.1954,
+      longitude: 106.8402,
+      notes: 'Briefing tim pagi',
+    },
+  ],
+  members: [
+    { id: 'mem-1', phone: '081288990011', name: 'Andi Wijaya', email: 'andi.wijaya@gmail.com', points: 350, tier: 'Gold', total_spent: 3500000, total_visits: 18, created_at: new Date(Date.now() - 86400000 * 60).toISOString() },
+    { id: 'mem-2', phone: '081377889922', name: 'Clarissa Putri', email: 'clarissa.p@yahoo.com', points: 120, tier: 'Silver', total_spent: 1200000, total_visits: 7, created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
+    { id: 'mem-3', phone: '085711223344', name: 'Rian Pratama', email: 'rian.pratama@outlook.com', points: 45, tier: 'Bronze', total_spent: 450000, total_visits: 3, created_at: new Date(Date.now() - 86400000 * 10).toISOString() },
+  ],
+  member_point_logs: [],
+  promotions: [
+    { id: 'promo-1', code: 'DISKON10', name: 'Promo Merdeka 10% All Menu', promo_type: 'percentage_discount', discount_value: 10, min_order_amount: 50000, is_active: true },
+    { id: 'promo-2', code: 'HAPPYHOUR', name: 'Happy Hour Kopi Sore (Rp 5.000 Off)', promo_type: 'fixed_amount', discount_value: 5000, min_order_amount: 25000, applicable_category_id: 'cat-coffee', start_hour: '14:00', end_hour: '17:00', is_active: true },
+    { id: 'promo-3', code: 'BOGOKOPI', name: 'Buy 1 Get 1 Kopi Susu', promo_type: 'bogo', discount_value: 22000, min_order_amount: 44000, applicable_category_id: 'cat-coffee', is_active: true },
+  ],
+  orders: [],
+  transactions: [],
+  chart_of_accounts: [
+    { id: 'coa-1101', code: '1101', name: 'Kas Kasir (Cash Drawer)', account_type: 'asset', normal_balance: 'debit', category: 'Kas & Bank', is_active: true },
+    { id: 'coa-1102', code: '1102', name: 'Bank BCA Rekening Utama', account_type: 'asset', normal_balance: 'debit', category: 'Kas & Bank', is_active: true },
+    { id: 'coa-1103', code: '1103', name: 'QRIS / Payment Gateway Settlement', account_type: 'asset', normal_balance: 'debit', category: 'Kas & Bank', is_active: true },
+    { id: 'coa-1104', code: '1104', name: 'Piutang Usaha / Pelanggan', account_type: 'asset', normal_balance: 'debit', category: 'Piutang', is_active: true },
+    { id: 'coa-1105', code: '1105', name: 'Persediaan Bahan Baku (BOM)', account_type: 'asset', normal_balance: 'debit', category: 'Persediaan', is_active: true },
+    { id: 'coa-1106', code: '1106', name: 'Persediaan Barang Jadi / Resale', account_type: 'asset', normal_balance: 'debit', category: 'Persediaan', is_active: true },
+    { id: 'coa-1201', code: '1201', name: 'Peralatan Mesin Espresso & Dapur', account_type: 'asset', normal_balance: 'debit', category: 'Aset Tetap', is_active: true },
+    { id: 'coa-2101', code: '2101', name: 'Hutang Usaha (Accounts Payable)', account_type: 'liability', normal_balance: 'credit', category: 'Hutang Lancar', is_active: true },
+    { id: 'coa-2102', code: '2102', name: 'Hutang PPN Keluaran 11%', account_type: 'liability', normal_balance: 'credit', category: 'Hutang Pajak', is_active: true },
+    { id: 'coa-2103', code: '2103', name: 'Hutang Service Charge Karyawan', account_type: 'liability', normal_balance: 'credit', category: 'Hutang Lancar', is_active: true },
+    { id: 'coa-3101', code: '3101', name: 'Modal Disetor Pemilik', account_type: 'equity', normal_balance: 'credit', category: 'Modal', is_active: true },
+    { id: 'coa-3201', code: '3201', name: 'Laba Ditahan (Retained Earnings)', account_type: 'equity', normal_balance: 'credit', category: 'Modal', is_active: true },
+    { id: 'coa-4101', code: '4101', name: 'Pendapatan Penjualan Kopi & Minuman', account_type: 'revenue', normal_balance: 'credit', category: 'Pendapatan F&B', is_active: true },
+    { id: 'coa-4102', code: '4102', name: 'Pendapatan Penjualan Makanan', account_type: 'revenue', normal_balance: 'credit', category: 'Pendapatan F&B', is_active: true },
+    { id: 'coa-4103', code: '4103', name: 'Pendapatan Penjualan Pastry & Lainnya', account_type: 'revenue', normal_balance: 'credit', category: 'Pendapatan F&B', is_active: true },
+    { id: 'coa-5101', code: '5101', name: 'Beban Pokok Penjualan (HPP Bahan Baku)', account_type: 'expense', normal_balance: 'debit', category: 'Harga Pokok Penjualan', is_active: true },
+    { id: 'coa-6101', code: '6101', name: 'Beban Gaji & Upah Karyawan', account_type: 'expense', normal_balance: 'debit', category: 'Beban Operasional', is_active: true },
+    { id: 'coa-6102', code: '6102', name: 'Beban Listrik, Air & Gas LPG', account_type: 'expense', normal_balance: 'debit', category: 'Beban Operasional', is_active: true },
+    { id: 'coa-6103', code: '6103', name: 'Beban Sewa Gedung & Tempat', account_type: 'expense', normal_balance: 'debit', category: 'Beban Operasional', is_active: true },
+    { id: 'coa-6104', code: '6104', name: 'Beban Kebersihan & Perlengkapan Kasir', account_type: 'expense', normal_balance: 'debit', category: 'Beban Operasional', is_active: true },
+    { id: 'coa-6105', code: '6105', name: 'Beban Fee Payment Gateway (QRIS 0.7%)', account_type: 'expense', normal_balance: 'debit', category: 'Beban Operasional', is_active: true },
+  ],
+  journal_entries: [],
+  audit_logs: [],
+};
+
+class DBStore {
+  private data: InMemoryDB;
+
+  constructor() {
+    this.data = this.loadData();
+  }
+
+  private loadData(): InMemoryDB {
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+        return JSON.parse(raw);
+      }
+    } catch (err) {
+      console.error('Error reading pos_db.json, re-initializing seed data', err);
+    }
+    this.saveData(initialSeedData);
+    return initialSeedData;
+  }
+
+  private saveData(dataToSave: InMemoryDB) {
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Error writing pos_db.json', err);
+    }
+  }
+
+  public get<K extends keyof InMemoryDB>(key: K): InMemoryDB[K] {
+    return this.data[key];
+  }
+
+  public set<K extends keyof InMemoryDB>(key: K, value: InMemoryDB[K]) {
+    this.data[key] = value;
+    this.saveData(this.data);
+  }
+
+  public insert<K extends keyof InMemoryDB>(key: K, item: any) {
+    (this.data[key] as any[]).push(item);
+    this.saveData(this.data);
+    return item;
+  }
+
+  public update<K extends keyof InMemoryDB>(key: K, predicate: (item: any) => boolean, updates: any) {
+    const list = this.data[key] as any[];
+    const idx = list.findIndex(predicate);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...updates, updated_at: new Date().toISOString() };
+      this.saveData(this.data);
+      return list[idx];
+    }
+    return null;
+  }
+
+  public delete<K extends keyof InMemoryDB>(key: K, predicate: (item: any) => boolean) {
+    const list = this.data[key] as any[];
+    const filtered = list.filter((item) => !predicate(item));
+    (this.data[key] as any[]) = filtered;
+    this.saveData(this.data);
+    return true;
+  }
+
+  public getRawDB(): InMemoryDB {
+    return this.data;
+  }
+
+  public resetToSeed() {
+    this.data = JSON.parse(JSON.stringify(initialSeedData));
+    this.saveData(this.data);
+  }
+}
+
+export const db = new DBStore();

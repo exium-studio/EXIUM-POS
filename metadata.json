@@ -1,0 +1,11 @@
+{
+  "name": "Nusantara POS Enterprise",
+  "description": "Aplikasi Point of Sales (POS) Multi-Cabang dengan Manajemen Stok Resep/BOM, Akuntansi Double-Entry, KDS Realtime, Offline-First Kasir, dan Pemesanan Mandiri via QR",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
