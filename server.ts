@@ -22,6 +22,9 @@ import { deductStockForOrder } from './server/services/stock';
 import { recordSalesJournal } from './server/services/accounting';
 
 async function startServer() {
+  // Initialize DB before setting up Express and checking seed conditions
+  await db.initialize();
+
   const app = express();
   const PORT = 3000;
   const server = http.createServer(app);

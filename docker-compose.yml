@@ -1,20 +1,35 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: exium-pos-db
+    environment:
+      POSTGRES_USER: pos_user
+      POSTGRES_PASSWORD: pos_password
+      POSTGRES_DB: pos_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pos-pg-data:/var/lib/postgresql/data
+    restart: always
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: exium-pos
+    container_name: exium-pos-app
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - DATABASE_URL=postgresql://pos_user:pos_password@db:5432/pos_db
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - APP_URL=${APP_URL:-http://localhost:3000}
-    volumes:
-      - pos-db-data:/app/server/data
+    depends_on:
+      - db
     restart: always
 
 volumes:
-  pos-db-data:
+  pos-pg-data:
     driver: local
+

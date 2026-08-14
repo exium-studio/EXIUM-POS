@@ -1,6 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const DATA_DIR = path.join(process.cwd(), 'server', 'data');
 const DB_FILE = path.join(DATA_DIR, 'pos_db.json');
@@ -597,30 +601,101 @@ const initialSeedData: InMemoryDB = {
 };
 
 class DBStore {
-  private data: InMemoryDB;
+  private data: InMemoryDB = JSON.parse(JSON.stringify(initialSeedData));
+  private pool!: Pool;
+  private needsSave = false;
+  private isSaving = false;
+  private saveTimeout: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.data = this.loadData();
+    const dbUrl = process.env.DATABASE_URL || 'postgresql://pos_user:pos_password@localhost:5432/pos_db';
+    this.pool = new Pool({
+      connectionString: dbUrl,
+      ssl: process.env.NODE_ENV === 'production' && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1') ? { rejectUnauthorized: false } : false
+    });
   }
 
-  private loadData(): InMemoryDB {
-    try {
+  public async initialize() {
+    console.log('Initializing PostgreSQL database...');
+    
+    // Create schema if not exists
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS pos_store (
+        id INT PRIMARY KEY,
+        data JSONB,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Check if we already have data in PostgreSQL
+    const res = await this.pool.query('SELECT data FROM pos_store WHERE id = 1');
+    
+    if (res.rows.length > 0) {
+      console.log('Loading database state from PostgreSQL JSONB...');
+      this.data = res.rows[0].data;
+    } else {
+      // Check if we can migrate from existing pos_db.json
       if (fs.existsSync(DB_FILE)) {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
-        return JSON.parse(raw);
+        try {
+          console.log('Migrating existing pos_db.json file to PostgreSQL...');
+          const raw = fs.readFileSync(DB_FILE, 'utf-8');
+          const localData = JSON.parse(raw);
+          
+          await this.pool.query(
+            'INSERT INTO pos_store (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1',
+            [JSON.stringify(localData)]
+          );
+          this.data = localData;
+          console.log('Migration successful!');
+          
+          // Rename the backup file so we don't migrate it again
+          fs.renameSync(DB_FILE, `${DB_FILE}.bak`);
+        } catch (err) {
+          console.error('Error during migration of pos_db.json to PostgreSQL, falling back to seed data:', err);
+          await this.saveDataToPostgres(initialSeedData);
+        }
+      } else {
+        console.log('No existing database found. Seeding initial data to PostgreSQL...');
+        await this.saveDataToPostgres(initialSeedData);
       }
-    } catch (err) {
-      console.error('Error reading pos_db.json, re-initializing seed data', err);
     }
-    this.saveData(initialSeedData);
-    return initialSeedData;
   }
 
-  private saveData(dataToSave: InMemoryDB) {
+  private async saveDataToPostgres(dataToSave: InMemoryDB) {
     try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8');
+      await this.pool.query(
+        'INSERT INTO pos_store (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = CURRENT_TIMESTAMP',
+        [JSON.stringify(dataToSave)]
+      );
     } catch (err) {
-      console.error('Error writing pos_db.json', err);
+      console.error('Failed to save to PostgreSQL database:', err);
+    }
+  }
+
+  private queueSave() {
+    this.needsSave = true;
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+    // Debounce the database write by 300ms to reduce database load under heavy concurrent API requests
+    this.saveTimeout = setTimeout(() => this.triggerSave(), 300);
+  }
+
+  private async triggerSave() {
+    if (this.isSaving || !this.needsSave) return;
+    this.isSaving = true;
+    this.needsSave = false;
+
+    try {
+      await this.saveDataToPostgres(this.data);
+    } catch (err) {
+      console.error('Background save to PostgreSQL failed, will retry:', err);
+      this.needsSave = true;
+    } finally {
+      this.isSaving = false;
+      if (this.needsSave) {
+        this.queueSave();
+      }
     }
   }
 
@@ -630,12 +705,12 @@ class DBStore {
 
   public set<K extends keyof InMemoryDB>(key: K, value: InMemoryDB[K]) {
     this.data[key] = value;
-    this.saveData(this.data);
+    this.queueSave();
   }
 
   public insert<K extends keyof InMemoryDB>(key: K, item: any) {
     (this.data[key] as any[]).push(item);
-    this.saveData(this.data);
+    this.queueSave();
     return item;
   }
 
@@ -644,7 +719,7 @@ class DBStore {
     const idx = list.findIndex(predicate);
     if (idx !== -1) {
       list[idx] = { ...list[idx], ...updates, updated_at: new Date().toISOString() };
-      this.saveData(this.data);
+      this.queueSave();
       return list[idx];
     }
     return null;
@@ -654,7 +729,7 @@ class DBStore {
     const list = this.data[key] as any[];
     const filtered = list.filter((item) => !predicate(item));
     (this.data[key] as any[]) = filtered;
-    this.saveData(this.data);
+    this.queueSave();
     return true;
   }
 
@@ -664,7 +739,7 @@ class DBStore {
 
   public resetToSeed() {
     this.data = JSON.parse(JSON.stringify(initialSeedData));
-    this.saveData(this.data);
+    this.queueSave();
   }
 }
 
