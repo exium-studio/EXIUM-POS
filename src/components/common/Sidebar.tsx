@@ -93,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const sidebarContent = (
     <div className="h-full flex flex-col justify-between p-4 gap-2 select-none">
       {/* Navigation Groups */}
-      <nav className="flex-1 overflow-y-auto pr-1 space-y-4">
+      <nav className="flex-1 overflow-y-auto pr-1 space-y-4 sidebar-scrollbar">
         {categories.map((cat) => {
           const itemsInCat = navItems.filter((item) => item.show && item.category === cat);
           if (itemsInCat.length === 0) return null;
