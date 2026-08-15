@@ -21,14 +21,25 @@ import {
   Shield,
   MapPin,
   Lock,
+  User as UserIcon,
+  Edit2,
+  Check,
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
-  const { activeBranch, activeBranchId, refreshBranches, branches, user } = useAuth();
+  const { activeBranch, activeBranchId, refreshBranches, branches, user, logout } = useAuth();
   const { isInstallable, isInstalled, isUpdateAvailable, installApp, getCacheSize, clearAppCache } = usePWA();
   
-  // Navigation
-  const [activeSubTab, setActiveSubTab] = useState<'general' | 'branches' | 'employees'>('general');
+  const isOwnerOrManager = user?.role_id === 'owner' || user?.role_id === 'manager';
+
+  // Navigation: profile is accessible to everyone, other tabs only for authorized users
+  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'general' | 'branches' | 'employees'>('profile');
+
+  // Profile Edit State (Own Account)
+  const [profileName, setProfileName] = useState('');
+  const [profileUsername, setProfileUsername] = useState('');
+  const [profilePassword, setProfilePassword] = useState('');
+  const [updatingProfile, setUpdatingProfile] = useState(false);
 
   // General Settings State
   const [taxPct, setTaxPct] = useState<number>(11);
@@ -47,6 +58,7 @@ export const SettingsView: React.FC = () => {
   // Modal State
   const [showBranchModal, setShowBranchModal] = useState<boolean>(false);
   const [showUserModal, setShowUserModal] = useState<boolean>(false);
+  const [showEditUserModal, setShowEditUserModal] = useState<boolean>(false);
 
   // Add Branch Form State
   const [newBranchName, setNewBranchName] = useState('');
@@ -65,7 +77,18 @@ export const SettingsView: React.FC = () => {
   const [newEmpPhone, setNewEmpPhone] = useState('');
   const [newEmpRole, setNewEmpRole] = useState('cashier');
   const [newEmpPassword, setNewEmpPassword] = useState('123456');
-  const [newEmpBranches, setNewEmpBranches] = useState<string[]>(['branch-1']);
+  const [newEmpBranches, setNewEmpBranches] = useState<string[]>([]);
+
+  // Edit Employee Form State
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [editEmpName, setEditEmpName] = useState('');
+  const [editEmpUsername, setEditEmpUsername] = useState('');
+  const [editEmpEmail, setEditEmpEmail] = useState('');
+  const [editEmpPhone, setEditEmpPhone] = useState('');
+  const [editEmpRole, setEditEmpRole] = useState('');
+  const [editEmpPassword, setEditEmpPassword] = useState('');
+  const [editEmpBranches, setEditEmpBranches] = useState<string[]>([]);
+  const [editEmpActive, setEditEmpActive] = useState(true);
 
   // Fetch employees
   const fetchEmployees = async () => {
@@ -81,6 +104,11 @@ export const SettingsView: React.FC = () => {
   };
 
   useEffect(() => {
+    if (user) {
+      setProfileName(user.full_name || '');
+      setProfileUsername(user.username || '');
+    }
+
     if (activeBranch) {
       setTaxPct(activeBranch.tax_percentage || 11);
       setServicePct(activeBranch.service_charge_percentage || 0);
@@ -88,10 +116,43 @@ export const SettingsView: React.FC = () => {
     }
     getCacheSize().then(setCacheSize);
     
-    if (activeSubTab === 'employees') {
+    if (activeSubTab === 'employees' && isOwnerOrManager) {
       fetchEmployees();
     }
-  }, [activeBranch, activeSubTab]);
+  }, [activeBranch, activeSubTab, user]);
+
+  // Update Own Profile
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profileName.trim() || !profileUsername.trim()) {
+      alert('Nama Lengkap dan Username tidak boleh kosong');
+      return;
+    }
+    setUpdatingProfile(true);
+    try {
+      const updatedUser = await api.put('/auth/me', {
+        full_name: profileName,
+        username: profileUsername,
+        password: profilePassword || undefined,
+      });
+
+      // Update local state in context
+      localStorage.setItem('pos_user', JSON.stringify({
+        ...user,
+        full_name: updatedUser.full_name,
+        username: updatedUser.username,
+      }));
+
+      alert('Profil Anda berhasil diperbarui! Perubahan akan langsung diterapkan.');
+      setProfilePassword('');
+      // Force reload or refresh logic if needed
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message || 'Gagal memperbarui profil');
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
 
   const handleSaveSettings = async () => {
     setSaving(true);
@@ -166,7 +227,6 @@ export const SettingsView: React.FC = () => {
 
     try {
       await api.post('/auth/users', {
-        name: newEmpName, // used for full_name
         username: newEmpUsername,
         full_name: newEmpName,
         email: newEmpEmail,
@@ -186,81 +246,210 @@ export const SettingsView: React.FC = () => {
       setNewEmpPhone('');
       setNewEmpRole('cashier');
       setNewEmpPassword('123456');
-      setNewEmpBranches(['branch-1']);
+      setNewEmpBranches([]);
     } catch (err: any) {
       alert(err.message || 'Gagal menambahkan karyawan');
     }
   };
 
-  const handleBranchCheckboxChange = (bId: string) => {
-    setNewEmpBranches((prev) =>
-      prev.includes(bId) ? prev.filter((id) => id !== bId) : [...prev, bId]
-    );
+  // Open Edit Employee Modal
+  const openEditEmployee = (emp: any) => {
+    setSelectedEmpId(emp.id);
+    setEditEmpName(emp.full_name || '');
+    setEditEmpUsername(emp.username || '');
+    setEditEmpEmail(emp.email || '');
+    setEditEmpPhone(emp.phone || '');
+    setEditEmpRole(emp.role_id || 'cashier');
+    setEditEmpBranches(emp.branch_ids || []);
+    setEditEmpActive(emp.is_active !== false);
+    setEditEmpPassword(''); // leave blank for no change
+    setShowEditUserModal(true);
   };
 
-  // Check if owner or manager
-  const isAuthorized = user?.role_id === 'owner' || user?.role_id === 'manager';
+  // Edit Employee Submit
+  const handleEditEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editEmpName.trim() || !editEmpUsername.trim()) {
+      alert('Nama Lengkap dan Username wajib diisi');
+      return;
+    }
+    if (editEmpBranches.length === 0) {
+      alert('Karyawan harus ditugaskan minimal ke 1 cabang');
+      return;
+    }
 
-  if (!isAuthorized) {
-    return (
-      <div className="flex-grow flex items-center justify-center p-6 text-center">
-        <div className="max-w-md bg-white border border-gray-200 rounded-3xl p-8 shadow-xs">
-          <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
-          <h3 className="text-lg font-black text-slate-800">Akses Ditolak</h3>
-          <p className="text-xs text-slate-500 font-medium mt-2">
-            Halaman pengaturan administrasi hanya dapat diakses oleh Owner / Direksi atau Manajer Cabang.
-          </p>
-        </div>
-      </div>
-    );
-  }
+    try {
+      await api.put(`/auth/users/${selectedEmpId}`, {
+        username: editEmpUsername,
+        full_name: editEmpName,
+        email: editEmpEmail,
+        phone: editEmpPhone,
+        role_id: editEmpRole,
+        branch_ids: editEmpBranches,
+        is_active: editEmpActive,
+        password: editEmpPassword || undefined, // only send if filled
+      });
+      alert('Data karyawan berhasil diperbarui!');
+      setShowEditUserModal(false);
+      fetchEmployees();
+    } catch (err: any) {
+      alert(err.message || 'Gagal memperbarui data karyawan');
+    }
+  };
+
+  const handleBranchCheckboxChange = (bId: string, isEdit: boolean) => {
+    if (isEdit) {
+      setEditEmpBranches((prev) =>
+        prev.includes(bId) ? prev.filter((id) => id !== bId) : [...prev, bId]
+      );
+    } else {
+      setNewEmpBranches((prev) =>
+        prev.includes(bId) ? prev.filter((id) => id !== bId) : [...prev, bId]
+      );
+    }
+  };
 
   return (
     <div className="flex-grow bg-[#F8FAFC] overflow-y-auto p-4 sm:p-6 space-y-6">
       {/* Header and Sub Tabs Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">Pengaturan & Administrasi POS</h2>
+          <h2 className="text-xl font-black text-gray-900 tracking-tight">Pengaturan & Profil Pengguna</h2>
           <p className="text-xs text-gray-500 font-medium mt-0.5">
-            Kelola cabang/outlet, absensi karyawan, hak akses, dan diagnosa PWA offline.
+            Atur informasi pribadi Anda, atau konfigurasikan administrasi cabang dan karyawan.
           </p>
         </div>
 
         {/* Tab Buttons */}
         <div className="flex bg-slate-200/60 p-1 rounded-xl shrink-0">
           <button
-            onClick={() => setActiveSubTab('general')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeSubTab === 'general' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            Umum & PWA
-          </button>
-          <button
-            onClick={() => setActiveSubTab('branches')}
+            onClick={() => setActiveSubTab('profile')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeSubTab === 'branches' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
+              activeSubTab === 'profile' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
             }`}
           >
-            <Building2 className="w-3.5 h-3.5" />
-            <span>Cabang ({branches.length})</span>
+            <UserIcon className="w-3.5 h-3.5" />
+            <span>Profil Saya</span>
           </button>
-          <button
-            onClick={() => setActiveSubTab('employees')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeSubTab === 'employees' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Karyawan</span>
-          </button>
+          
+          {isOwnerOrManager && (
+            <>
+              <button
+                onClick={() => setActiveSubTab('general')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  activeSubTab === 'general' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                Umum & PWA
+              </button>
+              <button
+                onClick={() => setActiveSubTab('branches')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeSubTab === 'branches' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Cabang ({branches.length})</span>
+              </button>
+              <button
+                onClick={() => setActiveSubTab('employees')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeSubTab === 'employees' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Karyawan</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {/* ==================== SUBTAB: PROFILE ==================== */}
+      {activeSubTab === 'profile' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl">
+          {/* Card User Detail */}
+          <div className="bg-slate-900 rounded-3xl p-6 text-white flex flex-col items-center text-center justify-center border border-slate-800 shadow-xl relative overflow-hidden h-72">
+            <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] bg-blue-500/10 rounded-full blur-[60px]" />
+            <div className="w-20 h-20 rounded-full bg-blue-600 border-2 border-slate-700 flex items-center justify-center font-black text-2xl text-white shadow-lg relative z-10">
+              {user?.full_name?.charAt(0) || 'U'}
+            </div>
+            <h4 className="text-base font-bold mt-4 relative z-10">{user?.full_name}</h4>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1 relative z-10">@{user?.username}</p>
+            <span className="px-3 py-0.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 font-bold rounded-full text-[10px] tracking-wider mt-4 relative z-10">
+              {user?.role_name || user?.role_id}
+            </span>
+          </div>
+
+          {/* Form Edit Profile */}
+          <div className="bg-white rounded-3xl border border-gray-200 shadow-xs p-6 md:col-span-2">
+            <div className="flex items-center space-x-2 border-b border-gray-100 pb-3 mb-5">
+              <UserIcon className="w-4 h-4 text-blue-600" />
+              <h4 className="font-bold text-gray-900 text-sm">Informasi Personal Akun</h4>
+            </div>
+
+            <form onSubmit={handleUpdateProfile} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Nama Lengkap Anda:</label>
+                <input
+                  type="text"
+                  required
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">ID Pengguna (Username):</label>
+                <input
+                  type="text"
+                  required
+                  value={profileUsername}
+                  onChange={(e) => setProfileUsername(e.target.value)}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Kata Sandi Baru (Kosongkan jika tidak ingin mengubah):</label>
+                <div className="relative">
+                  <Lock className="w-3.5 h-3.5 absolute left-3 top-3.5 text-slate-400" />
+                  <input
+                    type="password"
+                    value={profilePassword}
+                    onChange={(e) => setProfilePassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full p-2.5 pl-9 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100">
+                <button
+                  type="submit"
+                  disabled={updatingProfile}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                >
+                  {updatingProfile ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Simpan Perubahan Profil</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ==================== SUBTAB: GENERAL ==================== */}
-      {activeSubTab === 'general' && (
+      {activeSubTab === 'general' && isOwnerOrManager && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
-          {/* Branch Tax & Service Charge Configuration */}
+          {/* Tax & Service configuration */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-5">
             <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
               <Building2 className="w-4 h-4 text-blue-600" />
@@ -371,7 +560,7 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Printer Configuration */}
+          {/* Printer configuration */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-5 lg:col-span-2">
             <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
               <Printer className="w-4 h-4 text-purple-600" />
@@ -414,7 +603,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ==================== SUBTAB: BRANCHES ==================== */}
-      {activeSubTab === 'branches' && (
+      {activeSubTab === 'branches' && isOwnerOrManager && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-slate-800 text-sm">Daftar Cabang Aktif</h4>
@@ -463,7 +652,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ==================== SUBTAB: EMPLOYEES ==================== */}
-      {activeSubTab === 'employees' && (
+      {activeSubTab === 'employees' && isOwnerOrManager && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-slate-800 text-sm">Manajemen Akun Karyawan</h4>
@@ -486,19 +675,20 @@ export const SettingsView: React.FC = () => {
                     <th className="p-4">Jabatan (Role)</th>
                     <th className="p-4">Cabang Penugasan</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loadingEmployees ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-400">
+                      <td colSpan={6} className="p-8 text-center text-slate-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
                         Memuat data karyawan...
                       </td>
                     </tr>
                   ) : employees.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-400">
+                      <td colSpan={6} className="p-8 text-center text-slate-400">
                         Belum ada karyawan terdaftar
                       </td>
                     </tr>
@@ -533,6 +723,15 @@ export const SettingsView: React.FC = () => {
                             <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full ${emp.is_active ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-slate-100 text-slate-500'}`}>
                               {emp.is_active ? 'Aktif' : 'Nonaktif'}
                             </span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <button
+                              onClick={() => openEditEmployee(emp)}
+                              className="p-2 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 rounded-xl transition-colors cursor-pointer"
+                              title="Edit Info & Reset Password Karyawan"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -768,7 +967,7 @@ export const SettingsView: React.FC = () => {
                       <input
                         type="checkbox"
                         checked={newEmpBranches.includes(b.id)}
-                        onChange={() => handleBranchCheckboxChange(b.id)}
+                        onChange={() => handleBranchCheckboxChange(b.id, false)}
                         className="w-4 h-4 rounded text-blue-600 border-gray-300"
                       />
                       <span className="truncate">{b.name}</span>
@@ -790,6 +989,149 @@ export const SettingsView: React.FC = () => {
                   className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl"
                 >
                   Simpan & Daftarkan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: EDIT EMPLOYEE ==================== */}
+      {showEditUserModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h5 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                <UserPlus className="w-5 h-5 text-blue-600" />
+                <span>Edit & Reset Sandi Karyawan</span>
+              </h5>
+              <button onClick={() => setShowEditUserModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm">✕</button>
+            </div>
+            
+            <form onSubmit={handleEditEmployee} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Nama Lengkap Karyawan:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editEmpName}
+                    onChange={(e) => setEditEmpName(e.target.value)}
+                    placeholder="Nama lengkap"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">ID Pengguna (Username):</label>
+                  <input
+                    type="text"
+                    required
+                    value={editEmpUsername}
+                    onChange={(e) => setEditEmpUsername(e.target.value)}
+                    placeholder="username"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Email:</label>
+                  <input
+                    type="email"
+                    value={editEmpEmail}
+                    onChange={(e) => setEditEmpEmail(e.target.value)}
+                    placeholder="email@address.com"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">No Telepon:</label>
+                  <input
+                    type="text"
+                    value={editEmpPhone}
+                    onChange={(e) => setEditEmpPhone(e.target.value)}
+                    placeholder="no telp"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Peran (Role):</label>
+                  <select
+                    value={editEmpRole}
+                    onChange={(e) => setEditEmpRole(e.target.value)}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="owner">Owner / Direksi</option>
+                    <option value="manager">Manajer Cabang</option>
+                    <option value="cashier">Kasir Utama</option>
+                    <option value="kitchen_food">KDS Makanan</option>
+                    <option value="kitchen_beverage">KDS Minuman</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Reset Kata Sandi (Isi untuk reset):</label>
+                  <div className="relative">
+                    <Lock className="w-3.5 h-3.5 absolute left-3 top-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={editEmpPassword}
+                      onChange={(e) => setEditEmpPassword(e.target.value)}
+                      placeholder="Masukkan sandi baru"
+                      className="w-full p-2.5 pl-9 bg-gray-50 border border-gray-200 rounded-xl font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Branch Assignment Checkboxes */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1.5">Cabang Penugasan:</label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-3.5 max-h-36 overflow-y-auto">
+                  {branches.map((b) => (
+                    <label key={b.id} className="flex items-center space-x-2.5 cursor-pointer hover:bg-slate-100 p-1.5 rounded-lg transition-colors font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={editEmpBranches.includes(b.id)}
+                        onChange={() => handleBranchCheckboxChange(b.id, true)}
+                        className="w-4 h-4 rounded text-blue-600 border-gray-300"
+                      />
+                      <span className="truncate">{b.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Account Status Switch */}
+              <div className="flex items-center space-x-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                <input
+                  type="checkbox"
+                  id="editEmpActive"
+                  checked={editEmpActive}
+                  onChange={(e) => setEditEmpActive(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                />
+                <label htmlFor="editEmpActive" className="font-bold text-slate-700 cursor-pointer">
+                  Status Akun Karyawan Ini Aktif (Bisa Login)
+                </label>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEditUserModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl"
+                >
+                  Simpan Perubahan
                 </button>
               </div>
             </form>

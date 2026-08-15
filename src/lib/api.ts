@@ -15,6 +15,7 @@ export const api = {
     const res = await fetch(url.toString(), {
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('pos_token') || ''}`,
       },
     });
     if (!res.ok) {
@@ -29,6 +30,7 @@ export const api = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('pos_token') || ''}`,
       },
       body: data ? JSON.stringify(data) : undefined,
     });
@@ -44,6 +46,7 @@ export const api = {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('pos_token') || ''}`,
       },
       body: data ? JSON.stringify(data) : undefined,
     });
@@ -57,6 +60,9 @@ export const api = {
   async delete(endpoint: string) {
     const res = await fetch(`${BASE_URL}${endpoint}`, {
       method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('pos_token') || ''}`,
+      },
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
