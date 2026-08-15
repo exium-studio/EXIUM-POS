@@ -688,6 +688,7 @@ posRouter.get('/receipt/:transaction_id', (req, res) => {
     receipt_social_handle: branch?.receipt_social_handle,
     receipt_tax_label: branch?.receipt_tax_label,
     receipt_service_label: branch?.receipt_service_label,
+    receipt_logo_url: branch?.receipt_logo_url,
   };
 
   const receiptText = formatThermalReceiptText(receiptData);

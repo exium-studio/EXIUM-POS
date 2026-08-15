@@ -17,6 +17,14 @@ export interface Branch {
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
+  receipt_header_name?: string;
+  receipt_header_tagline?: string;
+  receipt_footer_text?: string;
+  receipt_show_social?: boolean;
+  receipt_social_handle?: string;
+  receipt_tax_label?: string;
+  receipt_service_label?: string;
+  receipt_logo_url?: string;
 }
 
 export interface User {

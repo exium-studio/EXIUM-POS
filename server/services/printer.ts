@@ -34,6 +34,7 @@ export interface ThermalReceiptData {
   receipt_social_handle?: string;
   receipt_tax_label?: string;
   receipt_service_label?: string;
+  receipt_logo_url?: string;
 }
 
 export function formatThermalReceiptText(data: ThermalReceiptData): string {

@@ -63,6 +63,7 @@ export const SettingsView: React.FC = () => {
   const [receiptSocialHandle, setReceiptSocialHandle] = useState('');
   const [receiptTaxLabel, setReceiptTaxLabel] = useState('');
   const [receiptServiceLabel, setReceiptServiceLabel] = useState('');
+  const [receiptLogoUrl, setReceiptLogoUrl] = useState('');
 
   const [paperWidth, setPaperWidth] = useState<'58mm' | '80mm'>('80mm');
   const [cacheSize, setCacheSize] = useState<string>('Menghitung...');
@@ -155,6 +156,7 @@ export const SettingsView: React.FC = () => {
       setReceiptSocialHandle(activeBranch.receipt_social_handle || '@kopinusantara.id');
       setReceiptTaxLabel(activeBranch.receipt_tax_label || 'PPN (11%)');
       setReceiptServiceLabel(activeBranch.receipt_service_label || 'Service Charge');
+      setReceiptLogoUrl(activeBranch.receipt_logo_url || '');
     }
     getCacheSize().then(setCacheSize);
     
@@ -196,6 +198,21 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 800 * 1024) {
+        showToast('Ukuran logo maksimal 800KB agar database tetap ringan', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceiptLogoUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSaveSettings = async () => {
     setSaving(true);
     try {
@@ -211,6 +228,7 @@ export const SettingsView: React.FC = () => {
         receipt_social_handle: receiptSocialHandle,
         receipt_tax_label: receiptTaxLabel,
         receipt_service_label: receiptServiceLabel,
+        receipt_logo_url: receiptLogoUrl,
       });
       showToast('Pengaturan outlet dan struk berhasil diperbarui!', 'success');
       refreshBranches();
@@ -624,6 +642,53 @@ export const SettingsView: React.FC = () => {
               </div>
 
               <div className="space-y-4 text-xs">
+                {/* Logo Struk (Opsional) */}
+                <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl space-y-2">
+                  <span className="block font-bold text-purple-900">Logo Kustom Struk (Opsional)</span>
+                  <div className="flex items-center space-x-4">
+                    {receiptLogoUrl ? (
+                      <div className="relative w-16 h-16 bg-white border border-purple-200 rounded-xl flex items-center justify-center p-1 group overflow-hidden">
+                        <img src={receiptLogoUrl} alt="Logo Struk" className="max-w-full max-h-full object-contain" />
+                        <button
+                          type="button"
+                          onClick={() => setReceiptLogoUrl('')}
+                          className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer"
+                          title="Hapus Logo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center text-gray-400">
+                        <Printer className="w-6 h-6 stroke-[1.5]" />
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex items-center space-x-2">
+                        <label className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-[10px] cursor-pointer transition-colors shadow-xs">
+                          Unggah Logo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        {receiptLogoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setReceiptLogoUrl('')}
+                            className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-[10px] transition-colors cursor-pointer"
+                          >
+                            Hapus Logo
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-500 leading-normal">Direkomendasikan format PNG transparan atau monokrom, rasio persegi, maks 800KB.</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block font-bold text-gray-700 mb-1">Nama Toko (Header):</label>
@@ -814,6 +879,11 @@ export const SettingsView: React.FC = () => {
               {/* Thermal Paper Container */}
               <div className="bg-white text-slate-800 p-4 rounded-xl shadow-inner font-mono text-[10px] overflow-x-auto leading-normal select-none">
                 <div className={`mx-auto bg-white ${paperWidth === '80mm' ? 'w-full' : 'max-w-[220px]'}`}>
+                  {receiptLogoUrl && (
+                    <div className="flex justify-center mb-3">
+                      <img src={receiptLogoUrl} alt="Logo" className="max-h-12 object-contain" />
+                    </div>
+                  )}
                   <div className="text-center font-bold text-slate-950 text-xs mb-1 uppercase tracking-tight break-all">
                     {receiptHeaderName || 'NAMA OUTLET'}
                   </div>
