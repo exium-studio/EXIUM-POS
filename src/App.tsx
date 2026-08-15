@@ -142,6 +142,19 @@ const MainLayout: React.FC = () => {
 
 const AppContent: React.FC = () => {
   const { user } = useAuth();
+  
+  // Check if accessing via table QR code link (Guest customer self-ordering mode)
+  const isCustomerSelfOrder = window.location.search.includes('table_token') || window.location.search.includes('table_id');
+
+  if (isCustomerSelfOrder) {
+    return (
+      <POSProvider>
+        <div className="flex flex-col h-screen w-full bg-[#F8FAFC] font-sans overflow-hidden">
+          <CustomerQRView />
+        </div>
+      </POSProvider>
+    );
+  }
 
   if (!user) {
     return <LoginView />;

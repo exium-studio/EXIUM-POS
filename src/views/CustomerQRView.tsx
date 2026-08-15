@@ -39,7 +39,20 @@ export const CustomerQRView: React.FC = () => {
           api.get('/products/categories'),
         ]);
         setTables(tablesData);
-        if (tablesData.length > 0) setSelectedTable(tablesData[0]);
+        
+        // Dynamic table selection from URL params (Cloudflare / QR scan redirect)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTableId = urlParams.get('table_id');
+        const urlTableToken = urlParams.get('table_token');
+        
+        let targetTable = null;
+        if (urlTableId) {
+          targetTable = tablesData.find((t: any) => t.id === urlTableId);
+        } else if (urlTableToken) {
+          targetTable = tablesData.find((t: any) => t.qr_token === urlTableToken);
+        }
+        
+        setSelectedTable(targetTable || tablesData[0] || null);
         setProducts(prodsData);
         setCategories(catsData);
       } catch (e) {

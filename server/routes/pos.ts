@@ -283,8 +283,10 @@ posRouter.get('/tables', async (req, res) => {
     const enriched = await Promise.all(tables.map(async (t: any) => {
       const tableOrder = activeOrders.find((o: any) => o.table_id === t.id);
       
-      // Construct url for self ordering
-      const appUrl = process.env.APP_URL || `http://${req.headers.host || 'localhost:3000'}`;
+      // Construct url for self ordering dynamically with correct protocol (http/https) and host from Cloudflare headers
+      const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+      const host = req.headers.host || 'localhost:3000';
+      const appUrl = process.env.APP_URL || `${proto}://${host}`;
       const selfOrderUrl = `${appUrl}/?table_token=${t.qr_token}&table_id=${t.id}`;
       
       let qr_code_url = '';
