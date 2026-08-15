@@ -24,3 +24,44 @@
   scrollbar-color: #334155 transparent;
 }
 
+/* @media print styles to print ONLY the receipt, hiding all dashboard layout elements */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  
+  /* Hide all main layout wrapper components */
+  body > div, 
+  main, 
+  header, 
+  aside, 
+  .fixed, 
+  .absolute {
+    visibility: hidden;
+    display: none !important;
+  }
+
+  /* Make sure our receipt and only our receipt is visible */
+  #thermal-receipt, 
+  #thermal-receipt * {
+    visibility: visible;
+    display: block !important;
+  }
+
+  #thermal-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+}
+
+

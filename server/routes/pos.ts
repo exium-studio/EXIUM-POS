@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/store';
 import { deductStockForOrder, restoreStockForOrder } from '../services/stock';
+import QRCode from 'qrcode';
 import { recordSalesJournal } from '../services/accounting';
 import { paymentGateway } from '../services/payment-gateway';
 import { formatThermalReceiptText, formatKitchenTicketText, formatPreBillThermalText } from '../services/printer';
@@ -273,22 +274,40 @@ posRouter.get('/pre-bill/:order_id', (req, res) => {
 });
 
 // Dining Tables list
-posRouter.get('/tables', (req, res) => {
+posRouter.get('/tables', async (req, res) => {
   const branch_id = (req.query.branch_id as string) || 'branch-1';
   const tables = db.get('dining_tables').filter((t: any) => t.branch_id === branch_id);
   const activeOrders = db.get('orders').filter((o: any) => o.branch_id === branch_id && o.status !== 'completed' && o.status !== 'void');
 
-  const enriched = tables.map((t: any) => {
-    const tableOrder = activeOrders.find((o: any) => o.table_id === t.id);
-    return {
-      ...t,
-      occupied: Boolean(tableOrder),
-      current_order_id: tableOrder?.id,
-      current_order: tableOrder,
-    };
-  });
+  try {
+    const enriched = await Promise.all(tables.map(async (t: any) => {
+      const tableOrder = activeOrders.find((o: any) => o.table_id === t.id);
+      
+      // Construct url for self ordering
+      const appUrl = process.env.APP_URL || `http://${req.headers.host || 'localhost:3000'}`;
+      const selfOrderUrl = `${appUrl}/?table_token=${t.qr_token}&table_id=${t.id}`;
+      
+      let qr_code_url = '';
+      try {
+        qr_code_url = await QRCode.toDataURL(selfOrderUrl, { margin: 2, scale: 8 });
+      } catch (err) {
+        console.error(`Gagal membuat QRCode untuk meja ${t.table_number}:`, err);
+      }
 
-  res.json(enriched);
+      return {
+        ...t,
+        occupied: Boolean(tableOrder),
+        current_order_id: tableOrder?.id,
+        current_order: tableOrder,
+        qr_code_url,
+      };
+    }));
+
+    res.json(enriched);
+  } catch (err: any) {
+    console.error('Error fetching tables:', err);
+    res.status(500).json({ error: 'Gagal memuat denah meja' });
+  }
 });
 
 // Update Table QR Config

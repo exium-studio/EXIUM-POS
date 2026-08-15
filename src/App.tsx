@@ -31,7 +31,13 @@ import { LoginView } from './views/LoginView';
 import { useAuth } from './context/AuthContext';
 
 const MainLayout: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('pos');
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    if (user?.role_id === 'kitchen_food' || user?.role_id === 'kitchen_beverage') {
+      return 'kds';
+    }
+    return 'pos';
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { activeReceiptId, setActiveReceiptId } = usePOS();
 
