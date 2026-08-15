@@ -609,9 +609,10 @@ class DBStore {
 
   constructor() {
     const dbUrl = process.env.DATABASE_URL || 'postgresql://pos_user:pos_password@localhost:5432/pos_db';
+    const useSsl = dbUrl.includes('sslmode=require') || dbUrl.includes('ssl=true') || process.env.PGSSL === 'true';
     this.pool = new Pool({
       connectionString: dbUrl,
-      ssl: process.env.NODE_ENV === 'production' && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1') ? { rejectUnauthorized: false } : false
+      ssl: useSsl ? { rejectUnauthorized: false } : false
     });
   }
 
