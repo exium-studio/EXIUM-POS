@@ -262,7 +262,7 @@ posRouter.get('/pre-bill/:order_id', (req, res) => {
     tax: order.tax_amount || 0,
     service_charge: order.service_charge_amount || 0,
     total: order.total_amount,
-    paper_width_mm: 58 as const,
+    paper_width_mm: (branch?.receipt_paper_width === '58mm' ? 58 : 80) as 58 | 80,
   };
 
   const raw_text = formatPreBillThermalText(preBillData);
@@ -679,7 +679,7 @@ posRouter.get('/receipt/:transaction_id', (req, res) => {
     payment_method: trx.payment_method,
     paid_amount: trx.paid_amount,
     change_amount: trx.change_amount,
-    paper_width_mm: 58 as const,
+    paper_width_mm: (branch?.receipt_paper_width === '58mm' ? 58 : 80) as 58 | 80,
     // Custom receipt settings from branch
     receipt_header_name: branch?.receipt_header_name,
     receipt_header_tagline: branch?.receipt_header_tagline,

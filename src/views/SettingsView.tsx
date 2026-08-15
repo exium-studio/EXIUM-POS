@@ -157,6 +157,7 @@ export const SettingsView: React.FC = () => {
       setReceiptTaxLabel(activeBranch.receipt_tax_label || 'PPN (11%)');
       setReceiptServiceLabel(activeBranch.receipt_service_label || 'Service Charge');
       setReceiptLogoUrl(activeBranch.receipt_logo_url || '');
+      setPaperWidth(activeBranch.receipt_paper_width || '80mm');
     }
     getCacheSize().then(setCacheSize);
     
@@ -229,6 +230,7 @@ export const SettingsView: React.FC = () => {
         receipt_tax_label: receiptTaxLabel,
         receipt_service_label: receiptServiceLabel,
         receipt_logo_url: receiptLogoUrl,
+        receipt_paper_width: paperWidth,
       });
       showToast('Pengaturan outlet dan struk berhasil diperbarui!', 'success');
       refreshBranches();

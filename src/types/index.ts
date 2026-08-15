@@ -25,6 +25,7 @@ export interface Branch {
   receipt_tax_label?: string;
   receipt_service_label?: string;
   receipt_logo_url?: string;
+  receipt_paper_width?: '58mm' | '80mm';
 }
 
 export interface User {

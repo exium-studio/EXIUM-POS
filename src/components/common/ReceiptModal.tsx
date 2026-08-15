@@ -96,7 +96,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transactionId, onClo
           {loading ? (
             <div className="py-12 text-center text-gray-400 text-sm">Memuat format struk...</div>
           ) : (
-            <div id="thermal-receipt" className="w-full max-w-[340px] bg-white p-5 rounded-xl shadow-xs border border-gray-200 font-mono text-xs text-gray-800 whitespace-pre-wrap leading-relaxed select-text">
+            <div id="thermal-receipt" className={`w-full bg-white p-5 rounded-xl shadow-xs border border-gray-200 font-mono text-xs text-gray-800 whitespace-pre-wrap leading-relaxed select-text transition-all ${
+              receiptData?.paper_width_mm === 58 ? 'max-w-[240px]' : 'max-w-[340px]'
+            }`}>
               {activeView === 'customer' && receiptData?.receipt_logo_url && (
                 <div className="flex justify-center mb-3">
                   <img src={receiptData.receipt_logo_url} alt="Logo" className="max-h-12 object-contain" />
