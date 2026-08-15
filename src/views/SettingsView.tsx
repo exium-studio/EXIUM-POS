@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePWA } from '../lib/pwa';
 import { api } from '../lib/api';
 import { useToast } from '../context/ToastContext';
+import { bluetoothPrinter } from '../lib/bluetoothPrinter';
 import {
   Settings,
   Building2,
@@ -26,6 +27,8 @@ import {
   Edit2,
   Check,
   Eye,
+  Bluetooth,
+  Wifi,
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -69,6 +72,12 @@ export const SettingsView: React.FC = () => {
   const [cacheSize, setCacheSize] = useState<string>('Menghitung...');
   const [saving, setSaving] = useState<boolean>(false);
   const [clearing, setClearing] = useState<boolean>(false);
+
+  // Bluetooth Printer states
+  const [isBtSupported, setIsBtSupported] = useState(false);
+  const [isBtConnected, setIsBtConnected] = useState(false);
+  const [pairedDevice, setPairedDevice] = useState<any>(null);
+  const [btLoading, setBtLoading] = useState(false);
 
   // Employee State
   const [employees, setEmployees] = useState<any[]>([]);
@@ -165,6 +174,150 @@ export const SettingsView: React.FC = () => {
       fetchEmployees();
     }
   }, [activeBranch, activeSubTab, user]);
+
+  useEffect(() => {
+    setIsBtSupported(bluetoothPrinter.isSupported());
+    setIsBtConnected(bluetoothPrinter.isConnected());
+    setPairedDevice(bluetoothPrinter.getPairedDevice());
+
+    const handleStatusChange = () => {
+      setIsBtConnected(bluetoothPrinter.isConnected());
+      setPairedDevice(bluetoothPrinter.getPairedDevice());
+    };
+
+    window.addEventListener('bluetooth_printer_status_changed', handleStatusChange);
+    return () => {
+      window.removeEventListener('bluetooth_printer_status_changed', handleStatusChange);
+    };
+  }, []);
+
+  const handleConnectBt = async () => {
+    setBtLoading(true);
+    try {
+      const dev = await bluetoothPrinter.connect();
+      showToast(`Printer Bluetooth ${dev.name} berhasil terhubung!`, 'success');
+    } catch (e: any) {
+      if (e.name !== 'NotFoundError' && e.name !== 'AbortError') {
+        showToast(e.message || 'Gagal menghubungkan printer Bluetooth', 'error');
+      }
+    } finally {
+      setBtLoading(false);
+    }
+  };
+
+  const handleDisconnectBt = async () => {
+    try {
+      await bluetoothPrinter.disconnect();
+      showToast('Printer Bluetooth terputus', 'info');
+    } catch (e: any) {
+      showToast('Gagal memutus koneksi', 'error');
+    }
+  };
+
+  const handleTestPrint = async () => {
+    const formatIDR = (num: number) => `Rp ${num.toLocaleString('id-ID')}`;
+    const headerName = receiptHeaderName || activeBranch?.name || 'Kopi Nusantara';
+    const headerTagline = receiptHeaderTagline || activeBranch?.address || '';
+    const taxLabel = receiptTaxLabel || 'PPN (11%)';
+    const serviceLabel = receiptServiceLabel || 'Service Charge';
+    const width = paperWidth === '80mm' ? 48 : 32;
+
+    const center = (text: string) => {
+      const pad = Math.max(0, Math.floor((width - text.length) / 2));
+      return ' '.repeat(pad) + text;
+    };
+
+    const justify = (left: string, right: string) => {
+      const space = width - left.length - right.length;
+      return left + ' '.repeat(Math.max(1, space)) + right;
+    };
+
+    const line = '='.repeat(width);
+    const dashed = '-'.repeat(width);
+
+    const lines: string[] = [
+      center(headerName.toUpperCase()),
+    ];
+
+    if (headerTagline) {
+      headerTagline.split('\n').forEach(t => lines.push(center(t)));
+    }
+    if (activeBranch?.phone) {
+      lines.push(center(`Telp: ${activeBranch.phone}`));
+    }
+    lines.push(line);
+    lines.push(center('*** STRUK UJI COBA PRINTER ***'));
+    lines.push(justify('Tanggal:', new Date().toLocaleDateString('id-ID')));
+    lines.push(justify('Waktu:', new Date().toLocaleTimeString('id-ID')));
+    lines.push(dashed);
+    lines.push('Menu Simulasi Uji Coba:');
+    lines.push(justify('  1x Kopi Susu Aren', formatIDR(22000)));
+    lines.push(justify('  1x Nasi Goreng', formatIDR(38000)));
+    lines.push(dashed);
+    lines.push(justify('Subtotal:', formatIDR(60000)));
+    lines.push(justify(`${serviceLabel}:`, formatIDR(3000)));
+    lines.push(justify(`${taxLabel}:`, formatIDR(6930)));
+    lines.push(line);
+    lines.push(justify('TOTAL:', formatIDR(69930)));
+    lines.push(line);
+    
+    if (receiptFooterText) {
+      receiptFooterText.split('\n').forEach(f => lines.push(center(f)));
+    } else {
+      lines.push(center('Terima Kasih Atas Kunjungan Anda'));
+    }
+    if (receiptShowSocial && receiptSocialHandle) {
+      lines.push(center(`Sosmed: ${receiptSocialHandle}`));
+    }
+
+    const testText = lines.join('\n');
+
+    if (isBtConnected) {
+      setBtLoading(true);
+      try {
+        await bluetoothPrinter.print(testText);
+        showToast('Struk uji coba berhasil dikirim ke printer!', 'success');
+      } catch (e: any) {
+        showToast(e.message, 'error');
+      } finally {
+        setBtLoading(false);
+      }
+    } else {
+      // Fallback: trigger standard browser printing using a temporary window
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Print Test</title>
+              <style>
+                body {
+                  font-family: monospace;
+                  font-size: 11px;
+                  white-space: pre-wrap;
+                  padding: 10px;
+                  max-width: ${paperWidth === '80mm' ? '300px' : '220px'};
+                  margin: 0 auto;
+                  color: black;
+                }
+              </style>
+            </head>
+            <body>
+              ${receiptLogoUrl ? `<div style="text-align:center;margin-bottom:10px;"><img src="${receiptLogoUrl}" style="max-height:60px;object-contain:contain;" /></div>` : ''}
+              ${testText.replace(/\n/g, '<br>')}
+              <script>
+                window.onload = function() {
+                  window.print();
+                  setTimeout(() => window.close(), 500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    }
+  };
 
   // Update Own Profile
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -986,6 +1139,108 @@ export const SettingsView: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {/* Uji Coba Cetak & Bluetooth Config */}
+              <div className="space-y-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleTestPrint}
+                  disabled={btLoading}
+                  className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-md ${
+                    isBtConnected
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-purple-600 hover:bg-purple-700 text-white'
+                  }`}
+                >
+                  {isBtConnected ? (
+                    <Bluetooth className="w-4 h-4 animate-pulse" />
+                  ) : (
+                    <Printer className="w-4 h-4" />
+                  )}
+                  <span>
+                    {btLoading
+                      ? 'Memproses...'
+                      : isBtConnected
+                      ? 'Coba Cetak Struk (Bluetooth)'
+                      : 'Coba Cetak Struk (Sistem/Browser)'}
+                  </span>
+                </button>
+
+                <div className="p-3.5 bg-slate-800/80 border border-slate-700/60 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Bluetooth className={`w-4 h-4 ${isBtConnected ? 'text-emerald-400' : 'text-slate-400'}`} />
+                      <span className="text-[11px] font-black text-white">Printer Bluetooth</span>
+                    </div>
+                    {isBtSupported ? (
+                      isBtConnected ? (
+                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 font-black text-[9px] rounded-full border border-emerald-500/20">
+                          Tersambung
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-slate-500/10 text-slate-400 font-black text-[9px] rounded-full border border-slate-700">
+                          Terputus
+                        </span>
+                      )
+                    ) : (
+                      <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 font-black text-[9px] rounded-full border border-rose-500/20">
+                        Tidak Didukung
+                      </span>
+                    )}
+                  </div>
+
+                  {!isBtSupported ? (
+                    <p className="text-[9px] text-slate-400 leading-normal">
+                      Gunakan Google Chrome, Microsoft Edge, atau Opera untuk mengaktifkan cetak Bluetooth langsung dari PWA.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {pairedDevice ? (
+                        <div className="flex items-center justify-between p-2 bg-slate-900/50 border border-slate-700/40 rounded-xl">
+                          <div className="truncate pr-2">
+                            <span className="block font-bold text-white text-[10px] truncate">
+                              {pairedDevice.name}
+                            </span>
+                            <span className="block text-[8px] text-slate-500">
+                              ID: {pairedDevice.id.slice(0, 15)}...
+                            </span>
+                          </div>
+                          {isBtConnected ? (
+                            <button
+                              type="button"
+                              onClick={handleDisconnectBt}
+                              disabled={btLoading}
+                              className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 hover:text-rose-200 border border-rose-500/30 rounded-lg text-[9px] font-bold transition-all cursor-pointer"
+                            >
+                              Putuskan
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleConnectBt}
+                              disabled={btLoading}
+                              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[9px] font-bold transition-all cursor-pointer shadow-xs"
+                            >
+                              Sambungkan
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleConnectBt}
+                          disabled={btLoading}
+                          className="w-full py-2 bg-slate-900 hover:bg-slate-950 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center space-x-1 cursor-pointer"
+                        >
+                          <Bluetooth className="w-3.5 h-3.5" />
+                          <span>Pindai & Sambungkan Printer</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <p className="text-[10px] text-slate-500 text-center leading-relaxed">
                 Tampilan di atas mensimulasikan struk thermal asli 58mm/80mm saat tercetak ke printer POS kasir Anda.
               </p>
