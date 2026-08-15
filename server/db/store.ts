@@ -606,6 +606,7 @@ class DBStore {
   private needsSave = false;
   private isSaving = false;
   private saveTimeout: NodeJS.Timeout | null = null;
+  private isLocalFallback = false;
 
   constructor() {
     const dbUrl = process.env.DATABASE_URL || 'postgresql://pos_user:pos_password@localhost:5432/pos_db';
@@ -619,50 +620,78 @@ class DBStore {
   public async initialize() {
     console.log('Initializing PostgreSQL database...');
     
-    // Create schema if not exists
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS pos_store (
-        id INT PRIMARY KEY,
-        data JSONB,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+    try {
+      // Create schema if not exists
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS pos_store (
+          id INT PRIMARY KEY,
+          data JSONB,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
-    // Check if we already have data in PostgreSQL
-    const res = await this.pool.query('SELECT data FROM pos_store WHERE id = 1');
-    
-    if (res.rows.length > 0) {
-      console.log('Loading database state from PostgreSQL JSONB...');
-      this.data = res.rows[0].data;
-    } else {
-      // Check if we can migrate from existing pos_db.json
-      if (fs.existsSync(DB_FILE)) {
-        try {
-          console.log('Migrating existing pos_db.json file to PostgreSQL...');
-          const raw = fs.readFileSync(DB_FILE, 'utf-8');
-          const localData = JSON.parse(raw);
-          
-          await this.pool.query(
-            'INSERT INTO pos_store (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1',
-            [JSON.stringify(localData)]
-          );
-          this.data = localData;
-          console.log('Migration successful!');
-          
-          // Rename the backup file so we don't migrate it again
-          fs.renameSync(DB_FILE, `${DB_FILE}.bak`);
-        } catch (err) {
-          console.error('Error during migration of pos_db.json to PostgreSQL, falling back to seed data:', err);
+      // Check if we already have data in PostgreSQL
+      const res = await this.pool.query('SELECT data FROM pos_store WHERE id = 1');
+      
+      if (res.rows.length > 0) {
+        console.log('Loading database state from PostgreSQL JSONB...');
+        this.data = res.rows[0].data;
+      } else {
+        // Check if we can migrate from existing pos_db.json
+        if (fs.existsSync(DB_FILE)) {
+          try {
+            console.log('Migrating existing pos_db.json file to PostgreSQL...');
+            const raw = fs.readFileSync(DB_FILE, 'utf-8');
+            const localData = JSON.parse(raw);
+            
+            await this.pool.query(
+              'INSERT INTO pos_store (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1',
+              [JSON.stringify(localData)]
+            );
+            this.data = localData;
+            console.log('Migration successful!');
+            
+            // Rename the backup file so we don't migrate it again
+            fs.renameSync(DB_FILE, `${DB_FILE}.bak`);
+          } catch (err) {
+            console.error('Error during migration of pos_db.json to PostgreSQL, falling back to seed data:', err);
+            await this.saveDataToPostgres(initialSeedData);
+          }
+        } else {
+          console.log('No existing database found. Seeding initial data to PostgreSQL...');
           await this.saveDataToPostgres(initialSeedData);
         }
+      }
+    } catch (pgError: any) {
+      console.warn('Could not connect to PostgreSQL. Falling back to local file storage (pos_db.json)... Error:', pgError.message);
+      this.isLocalFallback = true;
+      if (fs.existsSync(DB_FILE)) {
+        try {
+          const raw = fs.readFileSync(DB_FILE, 'utf-8');
+          this.data = JSON.parse(raw);
+          console.log('Loaded database state from local pos_db.json file.');
+        } catch (err) {
+          console.error('Error loading local pos_db.json, seeding initial data:', err);
+          this.data = JSON.parse(JSON.stringify(initialSeedData));
+          fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
+        }
       } else {
-        console.log('No existing database found. Seeding initial data to PostgreSQL...');
-        await this.saveDataToPostgres(initialSeedData);
+        console.log('No existing local database found. Seeding initial data to pos_db.json...');
+        this.data = JSON.parse(JSON.stringify(initialSeedData));
+        fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
       }
     }
   }
 
   private async saveDataToPostgres(dataToSave: InMemoryDB) {
+    if (this.isLocalFallback) {
+      try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8');
+      } catch (err) {
+        console.error('Failed to save to local pos_db.json file:', err);
+      }
+      return;
+    }
     try {
       await this.pool.query(
         'INSERT INTO pos_store (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = CURRENT_TIMESTAMP',
@@ -690,7 +719,7 @@ class DBStore {
     try {
       await this.saveDataToPostgres(this.data);
     } catch (err) {
-      console.error('Background save to PostgreSQL failed, will retry:', err);
+      console.error('Background save failed, will retry:', err);
       this.needsSave = true;
     } finally {
       this.isSaving = false;

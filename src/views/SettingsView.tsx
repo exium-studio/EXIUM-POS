@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { usePWA } from '../lib/pwa';
 import { api } from '../lib/api';
+import { useToast } from '../context/ToastContext';
 import {
   Settings,
   Building2,
@@ -24,16 +25,24 @@ import {
   User as UserIcon,
   Edit2,
   Check,
+  Eye,
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
-  const { activeBranch, activeBranchId, refreshBranches, branches, user, logout } = useAuth();
+  const { activeBranch, activeBranchId, refreshBranches, branches, user, logout, updateUser } = useAuth();
   const { isInstallable, isInstalled, isUpdateAvailable, installApp, getCacheSize, clearAppCache } = usePWA();
+  const { showToast } = useToast();
   
   const isOwnerOrManager = user?.role_id === 'owner' || user?.role_id === 'manager';
 
-  // Navigation: profile is accessible to everyone, other tabs only for authorized users
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'general' | 'branches' | 'employees'>('profile');
+  // Navigation: persist activeSubTab in localStorage
+  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'general' | 'branches' | 'employees'>(() => {
+    return (localStorage.getItem('pos_active_sub_tab') as any) || 'profile';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pos_active_sub_tab', activeSubTab);
+  }, [activeSubTab]);
 
   // Profile Edit State (Own Account)
   const [profileName, setProfileName] = useState('');
@@ -41,11 +50,20 @@ export const SettingsView: React.FC = () => {
   const [profilePassword, setProfilePassword] = useState('');
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
-  // General Settings State
+  // General Settings & Customizable Receipt State
   const [taxPct, setTaxPct] = useState<number>(11);
   const [servicePct, setServicePct] = useState<number>(0);
   const [isTaxInclusive, setIsTaxInclusive] = useState<boolean>(false);
-  const [receiptFooter, setReceiptFooter] = useState<string>('Terima Kasih Atas Kunjungan Anda!\nFollow Instagram kami @omnipos');
+  
+  // Custom Receipt settings
+  const [receiptHeaderName, setReceiptHeaderName] = useState('');
+  const [receiptHeaderTagline, setReceiptHeaderTagline] = useState('');
+  const [receiptFooterText, setReceiptFooterText] = useState('');
+  const [receiptShowSocial, setReceiptShowSocial] = useState(true);
+  const [receiptSocialHandle, setReceiptSocialHandle] = useState('');
+  const [receiptTaxLabel, setReceiptTaxLabel] = useState('');
+  const [receiptServiceLabel, setReceiptServiceLabel] = useState('');
+
   const [paperWidth, setPaperWidth] = useState<'58mm' | '80mm'>('80mm');
   const [cacheSize, setCacheSize] = useState<string>('Menghitung...');
   const [saving, setSaving] = useState<boolean>(false);
@@ -55,8 +73,9 @@ export const SettingsView: React.FC = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(false);
 
-  // Modal State
+  // Modals State
   const [showBranchModal, setShowBranchModal] = useState<boolean>(false);
+  const [showEditBranchModal, setShowEditBranchModal] = useState<boolean>(false);
   const [showUserModal, setShowUserModal] = useState<boolean>(false);
   const [showEditUserModal, setShowEditUserModal] = useState<boolean>(false);
 
@@ -66,9 +85,23 @@ export const SettingsView: React.FC = () => {
   const [newBranchAddress, setNewBranchAddress] = useState('');
   const [newBranchPhone, setNewBranchPhone] = useState('');
   const [newBranchEmail, setNewBranchEmail] = useState('');
-  const [newBranchHours, setNewBranchHours] = useState('07:00 - 22:00');
+  const [newBranchOpenTime, setNewBranchOpenTime] = useState('07:00');
+  const [newBranchCloseTime, setNewBranchCloseTime] = useState('22:00');
   const [newBranchTax, setNewBranchTax] = useState(11);
   const [newBranchService, setNewBranchService] = useState(0);
+
+  // Edit Branch Form State
+  const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [editBranchName, setEditBranchName] = useState('');
+  const [editBranchCode, setEditBranchCode] = useState('');
+  const [editBranchAddress, setEditBranchAddress] = useState('');
+  const [editBranchPhone, setEditBranchPhone] = useState('');
+  const [editBranchEmail, setEditBranchEmail] = useState('');
+  const [editBranchOpenTime, setEditBranchOpenTime] = useState('07:00');
+  const [editBranchCloseTime, setEditBranchCloseTime] = useState('22:00');
+  const [editBranchTax, setEditBranchTax] = useState(11);
+  const [editBranchService, setEditBranchService] = useState(0);
+  const [editBranchActive, setEditBranchActive] = useState(true);
 
   // Add Employee Form State
   const [newEmpName, setNewEmpName] = useState('');
@@ -113,6 +146,15 @@ export const SettingsView: React.FC = () => {
       setTaxPct(activeBranch.tax_percentage || 11);
       setServicePct(activeBranch.service_charge_percentage || 0);
       setIsTaxInclusive(activeBranch.is_tax_inclusive || false);
+
+      // Customizable receipt defaults
+      setReceiptHeaderName(activeBranch.receipt_header_name || activeBranch.name || 'Kopi Nusantara');
+      setReceiptHeaderTagline(activeBranch.receipt_header_tagline || activeBranch.address || '');
+      setReceiptFooterText(activeBranch.receipt_footer_text || 'Terima Kasih Atas Kunjungan Anda!\nSimpan struk ini sebagai bukti transaksi');
+      setReceiptShowSocial(activeBranch.receipt_show_social !== false);
+      setReceiptSocialHandle(activeBranch.receipt_social_handle || '@kopinusantara.id');
+      setReceiptTaxLabel(activeBranch.receipt_tax_label || 'PPN (11%)');
+      setReceiptServiceLabel(activeBranch.receipt_service_label || 'Service Charge');
     }
     getCacheSize().then(setCacheSize);
     
@@ -125,7 +167,7 @@ export const SettingsView: React.FC = () => {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profileName.trim() || !profileUsername.trim()) {
-      alert('Nama Lengkap dan Username tidak boleh kosong');
+      showToast('Nama Lengkap dan Username tidak boleh kosong', 'error');
       return;
     }
     setUpdatingProfile(true);
@@ -136,19 +178,19 @@ export const SettingsView: React.FC = () => {
         password: profilePassword || undefined,
       });
 
-      // Update local state in context
-      localStorage.setItem('pos_user', JSON.stringify({
+      // Update local state in context dynamically
+      const newUserState = {
         ...user,
         full_name: updatedUser.full_name,
         username: updatedUser.username,
-      }));
+      };
+      localStorage.setItem('pos_user', JSON.stringify(newUserState));
+      updateUser(newUserState);
 
-      alert('Profil Anda berhasil diperbarui! Perubahan akan langsung diterapkan.');
+      showToast('Profil Anda berhasil diperbarui!', 'success');
       setProfilePassword('');
-      // Force reload or refresh logic if needed
-      window.location.reload();
     } catch (err: any) {
-      alert(err.message || 'Gagal memperbarui profil');
+      showToast(err.message || 'Gagal memperbarui profil', 'error');
     } finally {
       setUpdatingProfile(false);
     }
@@ -161,11 +203,19 @@ export const SettingsView: React.FC = () => {
         tax_percentage: Number(taxPct),
         service_charge_percentage: Number(servicePct),
         is_tax_inclusive: isTaxInclusive,
+        // Customized receipt settings
+        receipt_header_name: receiptHeaderName,
+        receipt_header_tagline: receiptHeaderTagline,
+        receipt_footer_text: receiptFooterText,
+        receipt_show_social: receiptShowSocial,
+        receipt_social_handle: receiptSocialHandle,
+        receipt_tax_label: receiptTaxLabel,
+        receipt_service_label: receiptServiceLabel,
       });
-      alert('Pengaturan outlet cabang berhasil diperbarui!');
+      showToast('Pengaturan outlet dan struk berhasil diperbarui!', 'success');
       refreshBranches();
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message || 'Gagal memperbarui pengaturan', 'error');
     } finally {
       setSaving(false);
     }
@@ -183,21 +233,22 @@ export const SettingsView: React.FC = () => {
   const handleAddBranch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBranchName.trim()) {
-      alert('Nama cabang harus diisi');
+      showToast('Nama cabang harus diisi', 'error');
       return;
     }
     try {
+      const combinedHours = `${newBranchOpenTime} - ${newBranchCloseTime}`;
       await api.post('/branches', {
         name: newBranchName,
         code: newBranchCode,
         address: newBranchAddress,
         phone: newBranchPhone,
         email: newBranchEmail,
-        operating_hours: newBranchHours,
+        operating_hours: combinedHours,
         tax_percentage: Number(newBranchTax),
         service_charge_percentage: Number(newBranchService),
       });
-      alert('Cabang baru berhasil dibuat! Menu stok dan meja telah diinisialisasi secara otomatis.');
+      showToast('Cabang baru berhasil dibuat!', 'success');
       setShowBranchModal(false);
       refreshBranches();
       
@@ -207,9 +258,65 @@ export const SettingsView: React.FC = () => {
       setNewBranchAddress('');
       setNewBranchPhone('');
       setNewBranchEmail('');
-      setNewBranchHours('07:00 - 22:00');
+      setNewBranchOpenTime('07:00');
+      setNewBranchCloseTime('22:00');
     } catch (err: any) {
-      alert(err.message || 'Gagal menambahkan cabang');
+      showToast(err.message || 'Gagal menambahkan cabang', 'error');
+    }
+  };
+
+  // Open Edit Branch Modal
+  const openEditBranch = (b: any) => {
+    setSelectedBranchId(b.id);
+    setEditBranchName(b.name || '');
+    setEditBranchCode(b.code || '');
+    setEditBranchAddress(b.address || '');
+    setEditBranchPhone(b.phone || '');
+    setEditBranchEmail(b.email || '');
+    setEditBranchTax(b.tax_percentage || 11);
+    setEditBranchService(b.service_charge_percentage || 0);
+    setEditBranchActive(b.is_active !== false);
+
+    const hours = b.operating_hours || '07:00 - 22:00';
+    const parts = hours.split('-');
+    if (parts.length === 2) {
+      setEditBranchOpenTime(parts[0].trim());
+      setEditBranchCloseTime(parts[1].trim());
+    } else {
+      setEditBranchOpenTime('07:00');
+      setEditBranchCloseTime('22:00');
+    }
+
+    // Make sure we have latest employees list for the detail display
+    fetchEmployees();
+    setShowEditBranchModal(true);
+  };
+
+  // Edit Branch Submit
+  const handleEditBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editBranchName.trim()) {
+      showToast('Nama cabang harus diisi', 'error');
+      return;
+    }
+    try {
+      const combinedHours = `${editBranchOpenTime} - ${editBranchCloseTime}`;
+      await api.put(`/branches/${selectedBranchId}`, {
+        name: editBranchName,
+        code: editBranchCode,
+        address: editBranchAddress,
+        phone: editBranchPhone,
+        email: editBranchEmail,
+        operating_hours: combinedHours,
+        tax_percentage: Number(editBranchTax),
+        service_charge_percentage: Number(editBranchService),
+        is_active: editBranchActive,
+      });
+      showToast('Data cabang berhasil diperbarui!', 'success');
+      setShowEditBranchModal(false);
+      refreshBranches();
+    } catch (err: any) {
+      showToast(err.message || 'Gagal memperbarui data cabang', 'error');
     }
   };
 
@@ -217,11 +324,11 @@ export const SettingsView: React.FC = () => {
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmpName.trim() || !newEmpUsername.trim()) {
-      alert('Nama Lengkap dan Username wajib diisi');
+      showToast('Nama Lengkap dan Username wajib diisi', 'error');
       return;
     }
     if (newEmpBranches.length === 0) {
-      alert('Karyawan harus ditugaskan minimal ke 1 cabang');
+      showToast('Karyawan harus ditugaskan minimal ke 1 cabang', 'error');
       return;
     }
 
@@ -235,7 +342,7 @@ export const SettingsView: React.FC = () => {
         password: newEmpPassword,
         branch_ids: newEmpBranches,
       });
-      alert('Karyawan baru berhasil terdaftar!');
+      showToast('Karyawan baru berhasil terdaftar!', 'success');
       setShowUserModal(false);
       fetchEmployees();
 
@@ -248,7 +355,7 @@ export const SettingsView: React.FC = () => {
       setNewEmpPassword('123456');
       setNewEmpBranches([]);
     } catch (err: any) {
-      alert(err.message || 'Gagal menambahkan karyawan');
+      showToast(err.message || 'Gagal menambahkan karyawan', 'error');
     }
   };
 
@@ -270,11 +377,11 @@ export const SettingsView: React.FC = () => {
   const handleEditEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editEmpName.trim() || !editEmpUsername.trim()) {
-      alert('Nama Lengkap dan Username wajib diisi');
+      showToast('Nama Lengkap dan Username wajib diisi', 'error');
       return;
     }
     if (editEmpBranches.length === 0) {
-      alert('Karyawan harus ditugaskan minimal ke 1 cabang');
+      showToast('Karyawan harus ditugaskan minimal ke 1 cabang', 'error');
       return;
     }
 
@@ -289,11 +396,11 @@ export const SettingsView: React.FC = () => {
         is_active: editEmpActive,
         password: editEmpPassword || undefined, // only send if filled
       });
-      alert('Data karyawan berhasil diperbarui!');
+      showToast('Data karyawan berhasil diperbarui!', 'success');
       setShowEditUserModal(false);
       fetchEmployees();
     } catch (err: any) {
-      alert(err.message || 'Gagal memperbarui data karyawan');
+      showToast(err.message || 'Gagal memperbarui data karyawan', 'error');
     }
   };
 
@@ -306,6 +413,21 @@ export const SettingsView: React.FC = () => {
       setNewEmpBranches((prev) =>
         prev.includes(bId) ? prev.filter((id) => id !== bId) : [...prev, bId]
       );
+    }
+  };
+
+  // Filter employees assigned to selected branch for the modal view
+  const assignedEmployees = employees.filter((emp) => emp.branch_ids?.includes(selectedBranchId));
+
+  // Translate role key to Indonesian readable role
+  const translateRole = (roleId: string) => {
+    switch (roleId) {
+      case 'owner': return 'Owner / Direksi';
+      case 'manager': return 'Manajer Cabang';
+      case 'cashier': return 'Kasir Utama';
+      case 'kitchen_food': return 'Dapur Makanan';
+      case 'kitchen_beverage': return 'Dapur Minuman / Bar';
+      default: return roleId;
     }
   };
 
@@ -324,7 +446,7 @@ export const SettingsView: React.FC = () => {
         <div className="flex bg-slate-200/60 p-1 rounded-xl shrink-0">
           <button
             onClick={() => setActiveSubTab('profile')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               activeSubTab === 'profile' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
             }`}
           >
@@ -336,7 +458,7 @@ export const SettingsView: React.FC = () => {
             <>
               <button
                 onClick={() => setActiveSubTab('general')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   activeSubTab === 'general' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
                 }`}
               >
@@ -344,7 +466,7 @@ export const SettingsView: React.FC = () => {
               </button>
               <button
                 onClick={() => setActiveSubTab('branches')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeSubTab === 'branches' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
                 }`}
               >
@@ -353,7 +475,7 @@ export const SettingsView: React.FC = () => {
               </button>
               <button
                 onClick={() => setActiveSubTab('employees')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeSubTab === 'employees' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
                 }`}
               >
@@ -396,7 +518,7 @@ export const SettingsView: React.FC = () => {
                   required
                   value={profileName}
                   onChange={(e) => setProfileName(e.target.value)}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
                 />
               </div>
 
@@ -407,7 +529,7 @@ export const SettingsView: React.FC = () => {
                   required
                   value={profileUsername}
                   onChange={(e) => setProfileUsername(e.target.value)}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
                 />
               </div>
 
@@ -420,7 +542,7 @@ export const SettingsView: React.FC = () => {
                     value={profilePassword}
                     onChange={(e) => setProfilePassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full p-2.5 pl-9 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 pl-9 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -429,7 +551,7 @@ export const SettingsView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={updatingProfile}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   {updatingProfile ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -448,155 +570,353 @@ export const SettingsView: React.FC = () => {
 
       {/* ==================== SUBTAB: GENERAL ==================== */}
       {activeSubTab === 'general' && isOwnerOrManager && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
-          {/* Tax & Service configuration */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-5">
-            <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
-              <Building2 className="w-4 h-4 text-blue-600" />
-              <h4 className="font-bold text-gray-900 text-sm">Konfigurasi Outlet: {activeBranch?.name}</h4>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Pajak Restoran PB1 / PPN (%):</label>
-                <input
-                  type="number"
-                  value={taxPct}
-                  onChange={(e) => setTaxPct(Number(e.target.value))}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500"
-                />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-6xl">
+          {/* Settings inputs column */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* Tax & Service configuration */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-5">
+              <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+                <Building2 className="w-4 h-4 text-blue-600" />
+                <h4 className="font-bold text-gray-900 text-sm">Konfigurasi Finansial Cabang: {activeBranch?.name}</h4>
               </div>
 
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Service Charge (%):</label>
-                <input
-                  type="number"
-                  value={servicePct}
-                  onChange={(e) => setServicePct(Number(e.target.value))}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="flex items-center space-x-3 pt-1">
-                <input
-                  type="checkbox"
-                  id="taxInclusive"
-                  checked={isTaxInclusive}
-                  onChange={(e) => setIsTaxInclusive(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded"
-                />
-                <label htmlFor="taxInclusive" className="font-semibold text-gray-700 cursor-pointer">
-                  Harga Menu Sudah Termasuk Pajak (Tax Inclusive / Nett Price)
-                </label>
-              </div>
-
-              <div className="pt-3 border-t border-gray-100">
-                <button
-                  onClick={handleSaveSettings}
-                  disabled={saving}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors"
-                >
-                  {saving ? 'Menyimpan...' : 'Simpan Pengaturan Cabang'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* PWA & Offline Diagnostics */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-5">
-            <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
-              <Smartphone className="w-4 h-4 text-emerald-600" />
-              <h4 className="font-bold text-gray-900 text-sm">Status PWA & Mode Offline</h4>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <span className="font-bold text-gray-900 block">Status PWA</span>
-                  <span className="text-[10px] text-gray-500">
-                    {isInstalled ? 'Aplikasi berjalan dalam mode Standalone PWA' : 'Aplikasi berjalan di browser web'}
-                  </span>
+                  <label className="block font-bold text-gray-700 mb-1">Pajak Restoran PB1 / PPN (%):</label>
+                  <input
+                    type="number"
+                    value={taxPct}
+                    onChange={(e) => setTaxPct(Number(e.target.value))}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                  />
                 </div>
-                {isInstalled ? (
-                  <span className="px-2.5 py-1 bg-green-50 border border-green-200 text-green-700 font-black text-[10px] rounded-full flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Terpasang
-                  </span>
-                ) : (
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Service Charge (%):</label>
+                  <input
+                    type="number"
+                    value={servicePct}
+                    onChange={(e) => setServicePct(Number(e.target.value))}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-3 pt-3 md:col-span-2">
+                  <input
+                    type="checkbox"
+                    id="taxInclusive"
+                    checked={isTaxInclusive}
+                    onChange={(e) => setIsTaxInclusive(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                  />
+                  <label htmlFor="taxInclusive" className="font-semibold text-gray-700 cursor-pointer">
+                    Harga Menu Sudah Termasuk Pajak (Tax Inclusive / Nett Price)
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom receipt config */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-5">
+              <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+                <Printer className="w-4 h-4 text-purple-600" />
+                <h4 className="font-bold text-gray-900 text-sm">Pengaturan Kustom Teks Struk Kasir</h4>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Nama Toko (Header):</label>
+                    <input
+                      type="text"
+                      value={receiptHeaderName}
+                      onChange={(e) => setReceiptHeaderName(e.target.value)}
+                      placeholder="e.g. Kopi Nusantara Menteng"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Lebar Kertas Thermal:</label>
+                    <div className="flex space-x-2">
+                      {(['58mm', '80mm'] as const).map((w) => (
+                        <button
+                          key={w}
+                          type="button"
+                          onClick={() => setPaperWidth(w)}
+                          className={`flex-1 py-2.5 rounded-xl font-bold border text-[11px] transition-all cursor-pointer ${
+                            paperWidth === w
+                              ? 'bg-purple-50 text-purple-700 border-purple-300'
+                              : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          {w} {w === '80mm' ? '(POS)' : '(Mini)'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Tagline / Alamat Struk (Header):</label>
+                  <textarea
+                    rows={2}
+                    value={receiptHeaderTagline}
+                    onChange={(e) => setReceiptHeaderTagline(e.target.value)}
+                    placeholder="e.g. Jl. Teuku Cik Ditiro No. 42&#10;Menteng, Jakarta Pusat"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Label Pajak Struk:</label>
+                    <input
+                      type="text"
+                      value={receiptTaxLabel}
+                      onChange={(e) => setReceiptTaxLabel(e.target.value)}
+                      placeholder="e.g. PPN (11%) atau PB1 (10%)"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Label Service Charge:</label>
+                    <input
+                      type="text"
+                      value={receiptServiceLabel}
+                      onChange={(e) => setReceiptServiceLabel(e.target.value)}
+                      placeholder="e.g. Service Charge atau Biaya Layanan"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Catatan Kaki Struk (Footer):</label>
+                  <textarea
+                    rows={2}
+                    value={receiptFooterText}
+                    onChange={(e) => setReceiptFooterText(e.target.value)}
+                    placeholder="Tulis ucapan terima kasih..."
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="showSocial"
+                      checked={receiptShowSocial}
+                      onChange={(e) => setReceiptShowSocial(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="showSocial" className="font-bold text-gray-700 cursor-pointer">
+                      Tampilkan Akun Sosial Media
+                    </label>
+                  </div>
+                  {receiptShowSocial && (
+                    <div>
+                      <input
+                        type="text"
+                        value={receiptSocialHandle}
+                        onChange={(e) => setReceiptSocialHandle(e.target.value)}
+                        placeholder="e.g. @kopinusantara.id"
+                        className="w-full p-2 bg-white border border-gray-200 hover:border-slate-300 focus:border-blue-500 rounded-lg font-bold text-gray-900 focus:outline-none transition-colors"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3">
                   <button
-                    onClick={installApp}
-                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-xs flex items-center space-x-1"
+                    onClick={handleSaveSettings}
+                    disabled={saving}
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors cursor-pointer"
                   >
-                    <Download className="w-3 h-3" />
-                    <span>Install PWA</span>
+                    {saving ? 'Menyimpan...' : 'Simpan Semua Pengaturan & Format Struk'}
                   </button>
-                )}
-              </div>
-
-              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <HardDrive className="w-4 h-4 text-gray-500" />
-                  <span className="font-bold text-gray-800">Kapasitas Cache Offline:</span>
                 </div>
-                <span className="font-mono font-bold text-gray-900">{cacheSize}</span>
+              </div>
+            </div>
+
+            {/* PWA & Offline Diagnostics */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-5">
+              <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+                <Smartphone className="w-4 h-4 text-emerald-600" />
+                <h4 className="font-bold text-gray-900 text-sm">Status PWA & Mode Offline</h4>
               </div>
 
-              <div className="flex space-x-2 pt-1">
-                <button
-                  onClick={handleClearCache}
-                  disabled={clearing}
-                  className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-xs transition-colors flex items-center justify-center space-x-1"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Hapus Cache</span>
-                </button>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl font-bold text-xs transition-colors flex items-center justify-center space-x-1"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Reload App</span>
-                </button>
+              <div className="space-y-4 text-xs">
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-gray-900 block">Status PWA</span>
+                    <span className="text-[10px] text-gray-500">
+                      {isInstalled ? 'Aplikasi berjalan dalam mode Standalone PWA' : 'Aplikasi berjalan di browser web'}
+                    </span>
+                  </div>
+                  {isInstalled ? (
+                    <span className="px-2.5 py-1 bg-green-50 border border-green-200 text-green-700 font-black text-[10px] rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Terpasang
+                    </span>
+                  ) : (
+                    <button
+                      onClick={installApp}
+                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-xs flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Install PWA</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <HardDrive className="w-4 h-4 text-gray-500" />
+                    <span className="font-bold text-gray-800">Kapasitas Cache Offline:</span>
+                  </div>
+                  <span className="font-mono font-bold text-gray-900">{cacheSize}</span>
+                </div>
+
+                <div className="flex space-x-2 pt-1">
+                  <button
+                    onClick={handleClearCache}
+                    disabled={clearing}
+                    className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-xs transition-colors flex items-center justify-center space-x-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Cache</span>
+                  </button>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl font-bold text-xs transition-colors flex items-center justify-center space-x-1 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Reload App</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Printer configuration */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-5 lg:col-span-2">
-            <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
-              <Printer className="w-4 h-4 text-purple-600" />
-              <h4 className="font-bold text-gray-900 text-sm">Pengaturan Struk Kasir & Printer Thermal</h4>
-            </div>
+          {/* Live receipt preview column */}
+          <div className="lg:col-span-5">
+            <div className="sticky top-6 bg-slate-900 text-slate-300 rounded-3xl p-5 border border-slate-800 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Eye className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs font-black text-white">Live Preview Struk ({paperWidth})</span>
+                </div>
+                <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 font-bold rounded-full text-[9px]">Thermal Sim</span>
+              </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Lebar Kertas Thermal:</label>
-                <div className="flex space-x-3">
-                  {(['58mm', '80mm'] as const).map((w) => (
-                    <button
-                      key={w}
-                      type="button"
-                      onClick={() => setPaperWidth(w)}
-                      className={`flex-1 py-2.5 rounded-xl font-bold border transition-all ${
-                        paperWidth === w
-                          ? 'bg-purple-50 text-purple-700 border-purple-300'
-                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                      }`}
-                    >
-                      Format {w} {w === '80mm' ? '(Standar POS Resto)' : '(Mini Portable)'}
-                    </button>
-                  ))}
+              {/* Thermal Paper Container */}
+              <div className="bg-white text-slate-800 p-4 rounded-xl shadow-inner font-mono text-[10px] overflow-x-auto leading-normal select-none">
+                <div className={`mx-auto bg-white ${paperWidth === '80mm' ? 'w-full' : 'max-w-[220px]'}`}>
+                  <div className="text-center font-bold text-slate-950 text-xs mb-1 uppercase tracking-tight break-all">
+                    {receiptHeaderName || 'NAMA OUTLET'}
+                  </div>
+                  {receiptHeaderTagline && (
+                    <div className="text-center text-[9px] text-slate-500 mb-1 whitespace-pre-wrap break-words leading-tight">
+                      {receiptHeaderTagline}
+                    </div>
+                  )}
+                  {activeBranch?.phone && (
+                    <div className="text-center text-[9px] text-slate-500 mb-1">
+                      Telp: {activeBranch.phone}
+                    </div>
+                  )}
+                  <div className="my-1 border-t border-dashed border-slate-300" />
+                  
+                  <div className="flex justify-between text-[9px] text-slate-600">
+                    <span>No: TRX-100201</span>
+                    <span>15/08/2026</span>
+                  </div>
+                  <div className="flex justify-between text-[9px] text-slate-600">
+                    <span>Kasir: {user?.full_name || 'Kasir'}</span>
+                    <span>17:08:44</span>
+                  </div>
+                  <div className="flex justify-between text-[9px] text-slate-600 mb-1">
+                    <span>Pelanggan: Bpk. Budi</span>
+                    <span>Meja: 02</span>
+                  </div>
+                  <div className="border-t border-dashed border-slate-300 my-1" />
+
+                  {/* Items */}
+                  <div className="space-y-1 my-1">
+                    <div>
+                      <div className="font-bold text-slate-900">Es Kopi Susu Gula Aren</div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>  1x @Rp 22.000</span>
+                        <span className="text-slate-900">Rp 22.000</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900">Nasi Goreng Kampung Spesial</div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>  1x @Rp 38.000</span>
+                        <span className="text-slate-900">Rp 38.000</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="border-t border-dashed border-slate-300 my-1" />
+
+                  {/* Pricing details */}
+                  <div className="space-y-0.5 text-[9px]">
+                    <div className="flex justify-between">
+                      <span>Subtotal:</span>
+                      <span>Rp 60.000</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{receiptServiceLabel || 'Service Charge'}:</span>
+                      <span>Rp 3.000</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{receiptTaxLabel || 'PPN (11%)'}:</span>
+                      <span>Rp 6.930</span>
+                    </div>
+                  </div>
+                  
+                  <div className="border-t border-dashed border-slate-400 my-1.5" />
+                  
+                  <div className="flex justify-between font-black text-slate-950 mb-0.5">
+                    <span>TOTAL AKHIR:</span>
+                    <span>Rp 69.930</span>
+                  </div>
+                  <div className="flex justify-between text-[9px] text-slate-600">
+                    <span>Bayar (TUNAI):</span>
+                    <span>Rp 100.000</span>
+                  </div>
+                  <div className="flex justify-between text-[9px] text-slate-600">
+                    <span>Kembalian:</span>
+                    <span>Rp 30.070</span>
+                  </div>
+                  
+                  <div className="border-t border-dashed border-slate-300 my-1.5" />
+
+                  {/* Footer message */}
+                  {receiptFooterText ? (
+                    <div className="text-center text-[9px] text-slate-500 whitespace-pre-wrap leading-tight break-words">
+                      {receiptFooterText}
+                    </div>
+                  ) : (
+                    <div className="text-center text-[9px] text-slate-500">
+                      Terima Kasih Atas Kunjungan Anda
+                    </div>
+                  )}
+
+                  {receiptShowSocial && receiptSocialHandle && (
+                    <div className="text-center text-[9px] text-blue-600 font-bold mt-1">
+                      Sosmed: {receiptSocialHandle}
+                    </div>
+                  )}
                 </div>
               </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Catatan Kaki Struk (Footer Note):</label>
-                <textarea
-                  rows={2}
-                  value={receiptFooter}
-                  onChange={(e) => setReceiptFooter(e.target.value)}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-purple-500"
-                />
-              </div>
+              <p className="text-[10px] text-slate-500 text-center leading-relaxed">
+                Tampilan di atas mensimulasikan struk thermal asli 58mm/80mm saat tercetak ke printer POS kasir Anda.
+              </p>
             </div>
           </div>
         </div>
@@ -610,7 +930,7 @@ export const SettingsView: React.FC = () => {
             {user?.role_id === 'owner' && (
               <button
                 onClick={() => setShowBranchModal(true)}
-                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Tambah Cabang</span>
@@ -618,35 +938,60 @@ export const SettingsView: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {branches.map((b) => (
-              <div key={b.id} className="bg-white rounded-2xl border border-gray-200 shadow-xs p-5 relative overflow-hidden flex flex-col justify-between h-48">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="px-2.5 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-full font-black text-[9px] uppercase tracking-wider">
-                      {b.code}
-                    </span>
-                    <span className={`w-2.5 h-2.5 rounded-full ${b.is_active ? 'bg-green-500' : 'bg-slate-300'}`} />
-                  </div>
-                  <h5 className="font-bold text-gray-900 text-sm mt-3.5 truncate">{b.name}</h5>
-                  <p className="text-gray-500 text-[11px] font-medium mt-1.5 line-clamp-2 min-h-[2rem]">
-                    <MapPin className="w-3.5 h-3.5 inline mr-1 text-slate-400 shrink-0 align-text-top" />
-                    {b.address}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-[10px] font-bold text-slate-500">
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-slate-400" />
-                    {b.phone || '-'}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    {b.operating_hours || '07:00 - 22:00'}
-                  </span>
-                </div>
-              </div>
-            ))}
+          {/* Branches list table */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-gray-200 text-slate-500 font-bold uppercase tracking-wider">
+                    <th className="p-4">Kode</th>
+                    <th className="p-4">Nama Cabang</th>
+                    <th className="p-4">Alamat</th>
+                    <th className="p-4">Telepon / Email</th>
+                    <th className="p-4">Jam Operasional</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {branches.map((b) => (
+                    <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="p-4">
+                        <span className="px-2.5 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-full font-black text-[9px] uppercase tracking-wider">
+                          {b.code}
+                        </span>
+                      </td>
+                      <td className="p-4 font-bold text-slate-900">{b.name}</td>
+                      <td className="p-4 max-w-[200px] truncate" title={b.address}>
+                        {b.address}
+                      </td>
+                      <td className="p-4">
+                        <span className="block font-semibold text-slate-800">{b.phone || '-'}</span>
+                        <span className="text-[10px] text-slate-400 block">{b.email || '-'}</span>
+                      </td>
+                      <td className="p-4 flex items-center gap-1.5 pt-5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{b.operating_hours || '07:00 - 22:00'}</span>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full ${b.is_active !== false ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-slate-100 text-slate-500'}`}>
+                          {b.is_active !== false ? 'Aktif' : 'Nonaktif'}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => openEditBranch(b)}
+                          className="p-2 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 rounded-xl transition-colors cursor-pointer"
+                          title="Edit Info Cabang & Karyawan"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -658,7 +1003,7 @@ export const SettingsView: React.FC = () => {
             <h4 className="font-bold text-slate-800 text-sm">Manajemen Akun Karyawan</h4>
             <button
               onClick={() => setShowUserModal(true)}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
               <span>Tambah Karyawan</span>
@@ -707,7 +1052,7 @@ export const SettingsView: React.FC = () => {
                           </td>
                           <td className="p-4">
                             <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[10px] font-bold">
-                              {emp.role_id === 'owner' ? 'Owner' : emp.role_id === 'manager' ? 'Manager' : emp.role_id === 'cashier' ? 'Kasir' : 'KDS Dapur'}
+                              {translateRole(emp.role_id)}
                             </span>
                           </td>
                           <td className="p-4 max-w-[240px]">
@@ -753,7 +1098,7 @@ export const SettingsView: React.FC = () => {
                 <Building2 className="w-5 h-5 text-blue-600" />
                 <span>Buat Cabang / Outlet Baru</span>
               </h5>
-              <button onClick={() => setShowBranchModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm">✕</button>
+              <button onClick={() => setShowBranchModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm cursor-pointer">✕</button>
             </div>
             
             <form onSubmit={handleAddBranch} className="p-6 space-y-4 text-xs">
@@ -766,7 +1111,7 @@ export const SettingsView: React.FC = () => {
                     value={newBranchName}
                     onChange={(e) => setNewBranchName(e.target.value)}
                     placeholder="Contoh: Kopi Nusantara Menteng"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -776,7 +1121,7 @@ export const SettingsView: React.FC = () => {
                     value={newBranchCode}
                     onChange={(e) => setNewBranchCode(e.target.value)}
                     placeholder="Contoh: JKT-01"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -788,7 +1133,7 @@ export const SettingsView: React.FC = () => {
                   value={newBranchAddress}
                   onChange={(e) => setNewBranchAddress(e.target.value)}
                   placeholder="Jl. Teuku Cik Ditiro No. 42"
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                 />
               </div>
 
@@ -800,7 +1145,7 @@ export const SettingsView: React.FC = () => {
                     value={newBranchPhone}
                     onChange={(e) => setNewBranchPhone(e.target.value)}
                     placeholder="021-xxxxxx"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -810,29 +1155,40 @@ export const SettingsView: React.FC = () => {
                     value={newBranchEmail}
                     onChange={(e) => setNewBranchEmail(e.target.value)}
                     placeholder="outlet@kopinusantara.id"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 border border-slate-200 p-3 rounded-2xl">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Jam Operasional:</label>
+                  <label className="block font-bold text-gray-700 mb-1">Jam Buka:</label>
                   <input
-                    type="text"
-                    value={newBranchHours}
-                    onChange={(e) => setNewBranchHours(e.target.value)}
-                    placeholder="07:00 - 22:00"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    type="time"
+                    value={newBranchOpenTime}
+                    onChange={(e) => setNewBranchOpenTime(e.target.value)}
+                    className="w-full p-2 bg-white border border-gray-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Jam Tutup:</label>
+                  <input
+                    type="time"
+                    value={newBranchCloseTime}
+                    onChange={(e) => setNewBranchCloseTime(e.target.value)}
+                    className="w-full p-2 bg-white border border-gray-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">Pajak PB1 (%):</label>
                   <input
                     type="number"
                     value={newBranchTax}
                     onChange={(e) => setNewBranchTax(Number(e.target.value))}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -841,7 +1197,7 @@ export const SettingsView: React.FC = () => {
                     type="number"
                     value={newBranchService}
                     onChange={(e) => setNewBranchService(Number(e.target.value))}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -850,13 +1206,13 @@ export const SettingsView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowBranchModal(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl"
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer"
                 >
                   Simpan & Buat
                 </button>
@@ -866,7 +1222,196 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
-      {/* ==================== MODAL: ADD EMPLOYEE ==================== */}
+      {/* ==================== MODAL: EDIT BRANCH ==================== */}
+      {showEditBranchModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
+              <h5 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                <Building2 className="w-5 h-5 text-blue-600" />
+                <span>Edit Informasi Cabang & Detail Karyawan</span>
+              </h5>
+              <button onClick={() => setShowEditBranchModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm cursor-pointer">✕</button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              <form onSubmit={handleEditBranch} className="space-y-6 text-xs">
+                {/* Form fields */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Nama Cabang:</label>
+                    <input
+                      type="text"
+                      required
+                      value={editBranchName}
+                      onChange={(e) => setEditBranchName(e.target.value)}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Kode Cabang:</label>
+                    <input
+                      type="text"
+                      value={editBranchCode}
+                      onChange={(e) => setEditBranchCode(e.target.value)}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Alamat Lengkap:</label>
+                  <input
+                    type="text"
+                    value={editBranchAddress}
+                    onChange={(e) => setEditBranchAddress(e.target.value)}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Nomor Telepon:</label>
+                    <input
+                      type="text"
+                      value={editBranchPhone}
+                      onChange={(e) => setEditBranchPhone(e.target.value)}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Email:</label>
+                    <input
+                      type="email"
+                      value={editBranchEmail}
+                      onChange={(e) => setEditBranchEmail(e.target.value)}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Operating hours split with Time Pickers */}
+                <div className="grid grid-cols-2 gap-4 bg-slate-50 border border-slate-200 p-3.5 rounded-2xl">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Jam Operasional Buka:</label>
+                    <input
+                      type="time"
+                      value={editBranchOpenTime}
+                      onChange={(e) => setEditBranchOpenTime(e.target.value)}
+                      className="w-full p-2 bg-white border border-gray-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Jam Operasional Tutup:</label>
+                    <input
+                      type="time"
+                      value={editBranchCloseTime}
+                      onChange={(e) => setEditBranchCloseTime(e.target.value)}
+                      className="w-full p-2 bg-white border border-gray-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-bold text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Pajak Restoran PB1 (%):</label>
+                    <input
+                      type="number"
+                      value={editBranchTax}
+                      onChange={(e) => setEditBranchTax(Number(e.target.value))}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Service Charge (%):</label>
+                    <input
+                      type="number"
+                      value={editBranchService}
+                      onChange={(e) => setEditBranchService(Number(e.target.value))}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Assigned employees list (Requirement 5) */}
+                <div className="border-t border-slate-100 pt-4 space-y-2">
+                  <span className="block font-black text-slate-800">Daftar Karyawan di Cabang Ini ({assignedEmployees.length})</span>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead>
+                        <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-500 font-bold">
+                          <th className="p-2.5">Nama Lengkap</th>
+                          <th className="p-2.5">Username</th>
+                          <th className="p-2.5">Jabatan</th>
+                          <th className="p-2.5">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200/60 font-semibold text-slate-700">
+                        {assignedEmployees.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="p-4 text-center text-slate-400">
+                              Tidak ada karyawan yang ditugaskan ke cabang ini.
+                            </td>
+                          </tr>
+                        ) : (
+                          assignedEmployees.map((emp) => (
+                            <tr key={emp.id} className="hover:bg-slate-100/50 transition-colors">
+                              <td className="p-2.5 font-bold text-slate-900">{emp.full_name}</td>
+                              <td className="p-2.5 text-slate-500">@{emp.username}</td>
+                              <td className="p-2.5">
+                                <span className="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded-md text-[9px]">
+                                  {translateRole(emp.role_id)}
+                                </span>
+                              </td>
+                              <td className="p-2.5">
+                                <span className={emp.is_active ? 'text-green-600' : 'text-slate-400'}>
+                                  {emp.is_active ? 'Aktif' : 'Nonaktif'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Active Switch */}
+                <div className="flex items-center space-x-2.5 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <input
+                    type="checkbox"
+                    id="editBranchActive"
+                    checked={editBranchActive}
+                    onChange={(e) => setEditBranchActive(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                  />
+                  <label htmlFor="editBranchActive" className="font-bold text-gray-700 cursor-pointer">
+                    Cabang ini Aktif & Beroperasi
+                  </label>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-2 border-t border-slate-100 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditBranchModal(false)}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer"
+                  >
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: REGISTER EMPLOYEE ==================== */}
       {showUserModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
@@ -875,7 +1420,7 @@ export const SettingsView: React.FC = () => {
                 <UserPlus className="w-5 h-5 text-blue-600" />
                 <span>Daftarkan Karyawan Baru</span>
               </h5>
-              <button onClick={() => setShowUserModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm">✕</button>
+              <button onClick={() => setShowUserModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm cursor-pointer">✕</button>
             </div>
             
             <form onSubmit={handleAddEmployee} className="p-6 space-y-4 text-xs">
@@ -888,7 +1433,7 @@ export const SettingsView: React.FC = () => {
                     value={newEmpName}
                     onChange={(e) => setNewEmpName(e.target.value)}
                     placeholder="Contoh: John Doe"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -899,7 +1444,7 @@ export const SettingsView: React.FC = () => {
                     value={newEmpUsername}
                     onChange={(e) => setNewEmpUsername(e.target.value)}
                     placeholder="Contoh: johndoe"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -912,7 +1457,7 @@ export const SettingsView: React.FC = () => {
                     value={newEmpEmail}
                     onChange={(e) => setNewEmpEmail(e.target.value)}
                     placeholder="john@kopinusantara.id"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -922,7 +1467,7 @@ export const SettingsView: React.FC = () => {
                     value={newEmpPhone}
                     onChange={(e) => setNewEmpPhone(e.target.value)}
                     placeholder="0812xxxxxxxx"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -933,7 +1478,7 @@ export const SettingsView: React.FC = () => {
                   <select
                     value={newEmpRole}
                     onChange={(e) => setNewEmpRole(e.target.value)}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-slate-800 focus:outline-none transition-colors cursor-pointer"
                   >
                     <option value="owner">Owner / Direksi</option>
                     <option value="manager">Manajer Cabang</option>
@@ -952,7 +1497,7 @@ export const SettingsView: React.FC = () => {
                       value={newEmpPassword}
                       onChange={(e) => setNewEmpPassword(e.target.value)}
                       placeholder="Default: 123456"
-                      className="w-full p-2.5 pl-9 bg-gray-50 border border-gray-200 rounded-xl font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                      className="w-full p-2.5 pl-9 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-mono font-bold text-gray-900 focus:outline-none transition-colors"
                     />
                   </div>
                 </div>
@@ -968,7 +1513,7 @@ export const SettingsView: React.FC = () => {
                         type="checkbox"
                         checked={newEmpBranches.includes(b.id)}
                         onChange={() => handleBranchCheckboxChange(b.id, false)}
-                        className="w-4 h-4 rounded text-blue-600 border-gray-300"
+                        className="w-4 h-4 rounded text-blue-600 border-gray-300 cursor-pointer"
                       />
                       <span className="truncate">{b.name}</span>
                     </label>
@@ -980,13 +1525,13 @@ export const SettingsView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowUserModal(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl"
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer"
                 >
                   Simpan & Daftarkan
                 </button>
@@ -1005,7 +1550,7 @@ export const SettingsView: React.FC = () => {
                 <UserPlus className="w-5 h-5 text-blue-600" />
                 <span>Edit & Reset Sandi Karyawan</span>
               </h5>
-              <button onClick={() => setShowEditUserModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm">✕</button>
+              <button onClick={() => setShowEditUserModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm cursor-pointer">✕</button>
             </div>
             
             <form onSubmit={handleEditEmployee} className="p-6 space-y-4 text-xs">
@@ -1018,7 +1563,7 @@ export const SettingsView: React.FC = () => {
                     value={editEmpName}
                     onChange={(e) => setEditEmpName(e.target.value)}
                     placeholder="Nama lengkap"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -1029,7 +1574,7 @@ export const SettingsView: React.FC = () => {
                     value={editEmpUsername}
                     onChange={(e) => setEditEmpUsername(e.target.value)}
                     placeholder="username"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -1042,7 +1587,7 @@ export const SettingsView: React.FC = () => {
                     value={editEmpEmail}
                     onChange={(e) => setEditEmpEmail(e.target.value)}
                     placeholder="email@address.com"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -1052,7 +1597,7 @@ export const SettingsView: React.FC = () => {
                     value={editEmpPhone}
                     onChange={(e) => setEditEmpPhone(e.target.value)}
                     placeholder="no telp"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:outline-none focus:border-blue-500"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-medium text-gray-900 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -1063,7 +1608,7 @@ export const SettingsView: React.FC = () => {
                   <select
                     value={editEmpRole}
                     onChange={(e) => setEditEmpRole(e.target.value)}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-slate-800 focus:outline-none transition-colors cursor-pointer"
                   >
                     <option value="owner">Owner / Direksi</option>
                     <option value="manager">Manajer Cabang</option>
@@ -1081,7 +1626,7 @@ export const SettingsView: React.FC = () => {
                       value={editEmpPassword}
                       onChange={(e) => setEditEmpPassword(e.target.value)}
                       placeholder="Masukkan sandi baru"
-                      className="w-full p-2.5 pl-9 bg-gray-50 border border-gray-200 rounded-xl font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                      className="w-full p-2.5 pl-9 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-mono font-bold text-gray-900 focus:outline-none transition-colors"
                     />
                   </div>
                 </div>
@@ -1097,7 +1642,7 @@ export const SettingsView: React.FC = () => {
                         type="checkbox"
                         checked={editEmpBranches.includes(b.id)}
                         onChange={() => handleBranchCheckboxChange(b.id, true)}
-                        className="w-4 h-4 rounded text-blue-600 border-gray-300"
+                        className="w-4 h-4 rounded text-blue-600 border-gray-300 cursor-pointer"
                       />
                       <span className="truncate">{b.name}</span>
                     </label>
@@ -1123,13 +1668,13 @@ export const SettingsView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowEditUserModal(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl"
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer"
                 >
                   Simpan Perubahan
                 </button>

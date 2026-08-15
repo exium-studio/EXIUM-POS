@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
+import { isBranchOpen } from '../lib/utils';
 import {
   QrCode,
   UtensilsCrossed,
@@ -234,6 +235,29 @@ export const CustomerQRView: React.FC = () => {
       alert('Gagal memindahkan meja: ' + e.message);
     }
   };
+
+  const activeBranch = branches.find((b) => b.id === activeBranchId);
+  const isOpen = activeBranch ? isBranchOpen(activeBranch.operating_hours) : true;
+
+  if (!isOpen) {
+    return (
+      <div className="w-full min-h-screen bg-[#0F172A] flex items-center justify-center font-sans p-6 text-center text-white">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl flex flex-col items-center">
+          <AlertCircle className="w-16 h-16 text-rose-500 mb-5 animate-bounce" />
+          <h2 className="text-xl font-black mb-2 text-white">Outlet Sedang Tutup</h2>
+          <p className="text-sm text-slate-400 max-w-xs mb-6">
+            Mohon maaf, saat ini outlet <strong>{activeBranch?.name}</strong> sedang tutup. Jam operasional kami adalah pukul <strong>{activeBranch?.operating_hours || '07:00 - 22:00'}</strong>.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+          >
+            Muat Ulang Halaman
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-[#0F172A] flex justify-center overflow-x-hidden font-sans">

@@ -30,14 +30,23 @@ import { SettingsView } from './views/SettingsView';
 import { LoginView } from './views/LoginView';
 import { useAuth } from './context/AuthContext';
 
+import { ToastProvider } from './context/ToastContext';
+import { useEffect } from 'react';
+
 const MainLayout: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    const saved = localStorage.getItem('pos_active_tab') as ActiveTab;
+    if (saved) return saved;
     if (user?.role_id === 'kitchen_food' || user?.role_id === 'kitchen_beverage') {
       return 'kds';
     }
     return 'pos';
   });
+
+  useEffect(() => {
+    localStorage.setItem('pos_active_tab', activeTab);
+  }, [activeTab]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { activeReceiptId, setActiveReceiptId } = usePOS();
 
@@ -169,9 +178,11 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 

@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { localDB } from '../lib/db';
 import { OpenBillsModal } from '../components/pos/OpenBillsModal';
 import { PreBillModal } from '../components/pos/PreBillModal';
+import { isBranchOpen } from '../lib/utils';
 import {
   Search,
   Plus,
@@ -417,10 +418,19 @@ export const POSView: React.FC<{ onOpenShiftModal: () => void }> = ({ onOpenShif
     }
   };
 
+  const isClosed = activeBranch ? !isBranchOpen(activeBranch.operating_hours) : false;
+
   return (
-    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-[#F8FAFC] relative">
-      {/* Toast Notification for Open Bill actions */}
-      {toastMessage && (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {isClosed && (
+        <div className="bg-amber-100 border-b border-amber-200 text-amber-800 text-[11px] font-bold py-1.5 px-4 text-center shrink-0 flex items-center justify-center gap-1.5 z-20">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+          <span>Outlet berada di luar jam operasional ({activeBranch?.operating_hours}).</span>
+        </div>
+      )}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-[#F8FAFC] relative">
+        {/* Toast Notification for Open Bill actions */}
+        {toastMessage && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-xl border border-slate-700 flex items-center space-x-2 animate-in slide-in-from-top-4 text-xs font-bold">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
@@ -1308,5 +1318,6 @@ export const POSView: React.FC<{ onOpenShiftModal: () => void }> = ({ onOpenShif
         />
       )}
     </div>
-  );
+  </div>
+);
 };

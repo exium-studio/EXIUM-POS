@@ -30,6 +30,8 @@ export interface User {
   is_active: boolean;
   branch_ids: string[]; // Assigned branches
   password?: string;
+  permissions?: string[];
+  active_branch_id?: string;
 }
 
 export interface Permission {

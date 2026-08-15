@@ -26,6 +26,14 @@ export interface ThermalReceiptData {
   paid_amount: number;
   change_amount: number;
   paper_width_mm: 58 | 80;
+  // Custom receipt configurations
+  receipt_header_name?: string;
+  receipt_header_tagline?: string;
+  receipt_footer_text?: string;
+  receipt_show_social?: boolean;
+  receipt_social_handle?: string;
+  receipt_tax_label?: string;
+  receipt_service_label?: string;
 }
 
 export function formatThermalReceiptText(data: ThermalReceiptData): string {
@@ -45,16 +53,31 @@ export function formatThermalReceiptText(data: ThermalReceiptData): string {
 
   const formatIDR = (num: number) => `Rp ${num.toLocaleString('id-ID')}`;
 
+  const headerName = data.receipt_header_name || data.branch_name;
+  const headerTagline = data.receipt_header_tagline || data.branch_address;
+  const taxLabel = data.receipt_tax_label || 'PPN (11%)';
+  const serviceLabel = data.receipt_service_label || 'Service Charge';
+
   const lines: string[] = [
-    center(data.branch_name.toUpperCase()),
-    center(data.branch_address),
-    center(`Telp: ${data.branch_phone}`),
-    line,
-    justify(`No: ${data.transaction_number}`, data.date_time.split(' ')[0]),
-    justify(`Kasir: ${data.cashier_name}`, data.date_time.split(' ')[1] || ''),
-    justify(`Pelanggan: ${data.customer_name}`, data.table_number ? `Meja: ${data.table_number}` : `Tipe: ${data.order_type}`),
-    dashed,
+    center(headerName.toUpperCase()),
   ];
+
+  if (headerTagline) {
+    // split tagline by newline if it has any, and center each line
+    headerTagline.split('\n').forEach(tLine => {
+      lines.push(center(tLine));
+    });
+  }
+
+  if (data.branch_phone) {
+    lines.push(center(`Telp: ${data.branch_phone}`));
+  }
+
+  lines.push(line);
+  lines.push(justify(`No: ${data.transaction_number}`, data.date_time.split(' ')[0]));
+  lines.push(justify(`Kasir: ${data.cashier_name}`, data.date_time.split(' ')[1] || ''));
+  lines.push(justify(`Pelanggan: ${data.customer_name}`, data.table_number ? `Meja: ${data.table_number}` : `Tipe: ${data.order_type}`));
+  lines.push(dashed);
 
   for (const item of data.items) {
     const itemTitle = item.variant ? `${item.name} (${item.variant})` : item.name;
@@ -71,10 +94,10 @@ export function formatThermalReceiptText(data: ThermalReceiptData): string {
     lines.push(justify('Diskon:', `-${formatIDR(data.discount)}`));
   }
   if (data.service_charge > 0) {
-    lines.push(justify('Service Charge:', formatIDR(data.service_charge)));
+    lines.push(justify(`${serviceLabel}:`, formatIDR(data.service_charge)));
   }
   if (data.tax > 0) {
-    lines.push(justify('PPN (11%):', formatIDR(data.tax)));
+    lines.push(justify(`${taxLabel}:`, formatIDR(data.tax)));
   }
   lines.push(line);
   lines.push(justify('TOTAL AKHIR:', formatIDR(data.total)));
@@ -83,9 +106,20 @@ export function formatThermalReceiptText(data: ThermalReceiptData): string {
     lines.push(justify('Kembalian:', formatIDR(data.change_amount)));
   }
   lines.push(line);
-  lines.push(center('Terima Kasih Atas Kunjungan Anda'));
-  lines.push(center('Instagram: @kopinusantara.id'));
-  lines.push(center('Simpan struk ini sebagai bukti transaksi'));
+
+  // Custom footer
+  if (data.receipt_footer_text) {
+    data.receipt_footer_text.split('\n').forEach(fLine => {
+      lines.push(center(fLine));
+    });
+  } else {
+    lines.push(center('Terima Kasih Atas Kunjungan Anda'));
+    lines.push(center('Simpan struk ini sebagai bukti transaksi'));
+  }
+
+  if (data.receipt_show_social !== false && data.receipt_social_handle) {
+    lines.push(center(`Sosmed: ${data.receipt_social_handle}`));
+  }
 
   return lines.join('\n');
 }

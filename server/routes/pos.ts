@@ -680,6 +680,14 @@ posRouter.get('/receipt/:transaction_id', (req, res) => {
     paid_amount: trx.paid_amount,
     change_amount: trx.change_amount,
     paper_width_mm: 58 as const,
+    // Custom receipt settings from branch
+    receipt_header_name: branch?.receipt_header_name,
+    receipt_header_tagline: branch?.receipt_header_tagline,
+    receipt_footer_text: branch?.receipt_footer_text,
+    receipt_show_social: branch?.receipt_show_social !== false,
+    receipt_social_handle: branch?.receipt_social_handle,
+    receipt_tax_label: branch?.receipt_tax_label,
+    receipt_service_label: branch?.receipt_service_label,
   };
 
   const receiptText = formatThermalReceiptText(receiptData);

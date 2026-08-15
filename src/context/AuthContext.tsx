@@ -13,6 +13,7 @@ interface AuthContextType {
   hasPermission: (permissionId: string) => boolean;
   switchUserAccount: (userId: string) => void;
   refreshBranches: () => Promise<void>;
+  updateUser: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -127,6 +128,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return permissions.includes(permissionId);
   };
 
+  const updateUser = (updatedUser: User | null) => {
+    setUser(updatedUser);
+    if (updatedUser) {
+      setPermissions(updatedUser.permissions || []);
+      if (updatedUser.active_branch_id) {
+        setActiveBranchId(updatedUser.active_branch_id);
+      }
+    } else {
+      setPermissions([]);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-slate-900 text-white">
@@ -151,6 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasPermission,
         switchUserAccount,
         refreshBranches: loadBranches,
+        updateUser,
       }}
     >
       {children}
