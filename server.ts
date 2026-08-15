@@ -26,7 +26,7 @@ async function startServer() {
   await db.initialize();
 
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
   const server = http.createServer(app);
 
   // WebSocket Server for Realtime KDS & Order updates
