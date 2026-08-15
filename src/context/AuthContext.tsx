@@ -8,7 +8,8 @@ interface AuthContextType {
   activeBranch: Branch | null;
   activeBranchId: string;
   setActiveBranchId: (id: string) => void;
-  setUserRole: (role: RoleType) => void;
+  login: (username: string, password?: string, branchId?: string) => Promise<void>;
+  logout: () => void;
   hasPermission: (permissionId: string) => boolean;
   switchUserAccount: (userId: string) => void;
   refreshBranches: () => Promise<void>;
@@ -19,23 +20,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [activeBranchId, setActiveBranchId] = useState<string>('branch-1');
-  const [user, setUser] = useState<User>({
-    id: 'user-owner',
-    username: 'owner',
-    full_name: 'Budi Santoso',
-    email: 'budi@kopinusantara.id',
-    role_id: 'owner',
-    role_name: 'Owner / Direksi',
-    is_active: true,
-    branch_ids: ['branch-1', 'branch-2', 'branch-3'],
-  });
-
-  const [permissions, setPermissions] = useState<string[]>([
-    'pos.access', 'pos.discount', 'pos.void', 'shift.manage',
-    'stock.view', 'stock.opname', 'stock.transfer', 'purchase.create',
-    'purchase.approve', 'accounting.view', 'reports.export',
-    'kds.food', 'kds.beverage', 'settings.manage'
-  ]);
+  const [user, setUser] = useState<User | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const loadBranches = async () => {
     try {
@@ -47,48 +34,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    // Load branches
     loadBranches();
+
+    // Check stored user and token on load
+    const storedUser = localStorage.getItem('pos_user');
+    const storedToken = localStorage.getItem('pos_token');
+    
+    if (storedUser && storedToken) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setPermissions(parsedUser.permissions || []);
+        if (parsedUser.active_branch_id) {
+          setActiveBranchId(parsedUser.active_branch_id);
+        }
+      } catch (e) {
+        console.error('Failed to parse stored user', e);
+        localStorage.removeItem('pos_user');
+        localStorage.removeItem('pos_token');
+      }
+    }
+    setLoading(false);
   }, []);
 
   const activeBranch = branches.find((b) => b.id === activeBranchId) || branches[0] || null;
 
-  const setUserRole = (role: RoleType) => {
-    const roleNames: Record<RoleType, string> = {
-      owner: 'Owner / Direksi',
-      manager: 'Manajer Cabang',
-      cashier: 'Kasir',
-      kitchen_food: 'Dapur Makanan',
-      kitchen_beverage: 'Dapur Minuman / Bar',
-    };
-
-    let newPermissions: string[] = [];
-    if (role === 'owner') {
-      newPermissions = [
-        'pos.access', 'pos.discount', 'pos.void', 'shift.manage',
-        'stock.view', 'stock.opname', 'stock.transfer', 'purchase.create',
-        'purchase.approve', 'accounting.view', 'reports.export',
-        'kds.food', 'kds.beverage', 'settings.manage'
-      ];
-    } else if (role === 'manager') {
-      newPermissions = [
-        'pos.access', 'pos.discount', 'pos.void', 'shift.manage',
-        'stock.view', 'stock.opname', 'stock.transfer', 'purchase.create',
-        'purchase.approve', 'accounting.view', 'reports.export'
-      ];
-    } else if (role === 'cashier') {
-      newPermissions = ['pos.access', 'shift.manage', 'stock.view'];
-    } else if (role === 'kitchen_food') {
-      newPermissions = ['kds.food'];
-    } else if (role === 'kitchen_beverage') {
-      newPermissions = ['kds.beverage'];
+  const login = async (username: string, password?: string, branchId?: string) => {
+    try {
+      const response = await api.post('/auth/login', { username, password, branch_id: branchId });
+      if (response && response.token && response.user) {
+        localStorage.setItem('pos_token', response.token);
+        localStorage.setItem('pos_user', JSON.stringify(response.user));
+        setUser(response.user);
+        setPermissions(response.user.permissions || []);
+        if (response.user.active_branch_id) {
+          setActiveBranchId(response.user.active_branch_id);
+        }
+      } else {
+        throw new Error('Response API login tidak valid');
+      }
+    } catch (e: any) {
+      console.error('Login error:', e);
+      throw new Error(e.message || 'Username atau password salah');
     }
+  };
 
-    setPermissions(newPermissions);
-    setUser((prev) => ({
-      ...prev,
-      role_id: role,
-      role_name: roleNames[role],
-    }));
+  const logout = () => {
+    localStorage.removeItem('pos_token');
+    localStorage.removeItem('pos_user');
+    setUser(null);
+    setPermissions([]);
   };
 
   const switchUserAccount = async (userId: string) => {
@@ -96,8 +92,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const users = await api.get('/auth/users');
       const target = users.find((u: any) => u.id === userId);
       if (target) {
-        setUser(target);
-        setUserRole(target.role_id);
+        // Mock a quick switch for admin convenience
+        const dummyToken = `token-${target.id}-${Date.now()}`;
+        const role = target.role_id;
+        
+        // Fetch role permissions
+        const rolesRes = await api.get('/auth/roles');
+        const rolePermissions = rolesRes.role_permissions
+          .filter((rp: any) => rp.role_id === role)
+          .map((rp: any) => rp.permission_id);
+
+        const updatedUser = {
+          ...target,
+          role_name: rolesRes.roles.find((r: any) => r.id === role)?.name || role,
+          permissions: rolePermissions,
+          active_branch_id: target.branch_ids?.[0] || 'branch-1'
+        };
+
+        localStorage.setItem('pos_token', dummyToken);
+        localStorage.setItem('pos_user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        setPermissions(rolePermissions);
+        if (updatedUser.active_branch_id) {
+          setActiveBranchId(updatedUser.active_branch_id);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -109,6 +127,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return permissions.includes(permissionId);
   };
 
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-900 text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm font-semibold tracking-wider">Memuat Akun...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -117,7 +146,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activeBranch,
         activeBranchId,
         setActiveBranchId,
-        setUserRole,
+        login,
+        logout,
         hasPermission,
         switchUserAccount,
         refreshBranches: loadBranches,

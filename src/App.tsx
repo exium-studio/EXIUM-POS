@@ -27,6 +27,8 @@ import { AccountingView } from './views/AccountingView';
 import { LoyaltyView } from './views/LoyaltyView';
 import { AttendanceView } from './views/AttendanceView';
 import { SettingsView } from './views/SettingsView';
+import { LoginView } from './views/LoginView';
+import { useAuth } from './context/AuthContext';
 
 const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('pos');
@@ -132,12 +134,24 @@ const MainLayout: React.FC = () => {
   );
 };
 
+const AppContent: React.FC = () => {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <LoginView />;
+  }
+
+  return (
+    <POSProvider>
+      <MainLayout />
+    </POSProvider>
+  );
+};
+
 export default function App() {
   return (
     <AuthProvider>
-      <POSProvider>
-        <MainLayout />
-      </POSProvider>
+      <AppContent />
     </AuthProvider>
   );
 }

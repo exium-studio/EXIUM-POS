@@ -23,11 +23,11 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobileMenu }) => {
-  const { branches, activeBranchId, setActiveBranchId, user, setUserRole } = useAuth();
+  const { branches, activeBranchId, setActiveBranchId, user, logout } = useAuth();
   const { isOffline, setIsOffline, pendingSyncCount, triggerSync, activeShift } = usePOS();
   const { isInstalled, isInstallable, isUpdateAvailable } = usePWA();
   const [isSyncing, setIsSyncing] = useState(false);
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [showPWAModal, setShowPWAModal] = useState(false);
 
   const handleManualSync = async () => {
@@ -160,43 +160,51 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
 
           <div className="h-7 w-px bg-gray-200 hidden md:block"></div>
 
-          {/* User Account & Role Switcher */}
+          {/* User Account & Dropdown */}
           <div className="relative">
             <div
-              onClick={() => setShowRoleMenu(!showRoleMenu)}
+              onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
             >
               <div className="text-right leading-none hidden lg:block">
                 <p className="text-xs font-bold text-[#1E293B]">{user?.full_name || 'Administrator'}</p>
                 <p className="text-[10px] text-gray-500 font-medium mt-0.5">{user?.role_name || 'Global Admin'}</p>
               </div>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#E2E8F0] border border-gray-300 flex items-center justify-center font-black text-xs text-[#1E293B] shadow-2xs">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center font-black text-xs text-blue-700 shadow-2xs">
                 {user?.full_name?.charAt(0) || 'A'}
               </div>
             </div>
 
-            {showRoleMenu && (
+            {showUserMenu && (
               <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-gray-200 py-2 z-50 animate-in fade-in slide-in-from-top-2">
-                <div className="px-4 py-2.5 border-b border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Simulasi Role Akun</p>
-                  <p className="text-xs font-semibold text-[#1E293B] mt-0.5">Uji hak akses granular sistem</p>
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="text-xs font-bold text-[#1E293B]">{user?.full_name}</p>
+                  <p className="text-[10px] text-gray-500 font-medium mt-0.5">@{user?.username} • {user?.role_name}</p>
+                  <p className="text-[9px] text-gray-400 font-mono mt-1 break-all">{user?.email}</p>
                 </div>
-                <div className="py-1">
-                  {rolesList.map((r) => (
-                    <button
-                      key={r.id}
-                      onClick={() => {
-                        setUserRole(r.id);
-                        setShowRoleMenu(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-xs font-semibold flex items-center justify-between hover:bg-gray-50 transition-colors ${
-                        user?.role_id === r.id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700'
-                      }`}
-                    >
-                      <span>{r.label}</span>
-                      {user?.role_id === r.id && <span className="w-2 h-2 rounded-full bg-blue-600" />}
-                    </button>
-                  ))}
+                <div className="p-2 border-b border-gray-100">
+                  <div className="bg-slate-50 rounded-xl p-2.5">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Hak Akses Aktif</p>
+                    <p className="text-[10px] text-slate-600 font-semibold mt-1">
+                      {user?.role_id === 'owner' 
+                        ? 'Akses Penuh (Full Control)' 
+                        : `${user?.permissions?.length || 0} Izin diaktifkan`}
+                    </p>
+                  </div>
+                </div>
+                <div className="p-1">
+                  <button
+                    onClick={() => {
+                      logout();
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span>Keluar dari Sistem</span>
+                  </button>
                 </div>
               </div>
             )}
