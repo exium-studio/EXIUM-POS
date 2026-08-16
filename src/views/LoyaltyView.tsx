@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { useToast } from '../context/ToastContext';
-import { Award, Gift, Tag, Users, RefreshCw, Plus, Settings, Percent, Calendar, Check, X, Edit2 } from 'lucide-react';
+import { Award, Gift, Tag, Users, RefreshCw, Plus, Settings, Percent, Calendar, Check, X, Edit2, Trash2 } from 'lucide-react';
 
 export const LoyaltyView: React.FC = () => {
   const { showToast } = useToast();
@@ -205,6 +205,28 @@ export const LoyaltyView: React.FC = () => {
     }
   };
 
+  const handleDeleteMember = async (member: any) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus member "${member.name}"?`)) return;
+    try {
+      await api.delete(`/loyalty/members/${member.id}`);
+      showToast(`Member "${member.name}" berhasil dihapus!`, 'success');
+      loadData();
+    } catch (err: any) {
+      showToast(err.message || 'Gagal menghapus member', 'error');
+    }
+  };
+
+  const handleDeletePromo = async (promo: any) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus voucher "${promo.code}"?`)) return;
+    try {
+      await api.delete(`/loyalty/promotions/${promo.id}`);
+      showToast(`Voucher promo "${promo.code}" berhasil dihapus!`, 'success');
+      loadData();
+    } catch (err: any) {
+      showToast(err.message || 'Gagal menghapus voucher', 'error');
+    }
+  };
+
   return (
     <div className="flex-grow bg-[#F8FAFC] overflow-y-auto p-4 sm:p-6 space-y-6">
       {/* Header */}
@@ -271,11 +293,20 @@ export const LoyaltyView: React.FC = () => {
                         {m.tier} Member
                       </span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-black text-blue-600 block">{m.points} Poin</span>
-                      <span className="text-[10px] text-gray-400">
-                        Total Belanja: Rp {m.total_spent?.toLocaleString('id-ID')}
-                      </span>
+                    <div className="text-right flex items-center gap-4">
+                      <div>
+                        <span className="text-sm font-black text-blue-600 block">{m.points} Poin</span>
+                        <span className="text-[10px] text-gray-400 block">
+                          Total Belanja: Rp {m.total_spent?.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteMember(m)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                        title="Hapus Member"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))
@@ -436,6 +467,13 @@ export const LoyaltyView: React.FC = () => {
                           title="Edit Voucher"
                         >
                           <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleDeletePromo(p)}
+                          className="p-1 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                          title="Hapus Voucher"
+                        >
+                          <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
                     </div>

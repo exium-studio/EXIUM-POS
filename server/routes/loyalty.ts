@@ -4,10 +4,14 @@ import crypto from 'crypto';
 
 export const loyaltyRouter = Router();
 
-// Members List & Search
+// Members List & Search (Exclude soft-deleted)
 loyaltyRouter.get('/members', (req, res) => {
   const q = (req.query.q as string)?.toLowerCase();
-  let members = db.get('members');
+  let members = db.get('members') || [];
+  
+  // Filter active members only
+  members = members.filter((m: any) => m.is_deleted !== true);
+
   if (q) {
     members = members.filter((m: any) => m.name.toLowerCase().includes(q) || m.phone.includes(q));
   }
@@ -16,7 +20,7 @@ loyaltyRouter.get('/members', (req, res) => {
 
 // Member Lookup by phone
 loyaltyRouter.get('/members/phone/:phone', (req, res) => {
-  const mem = db.get('members').find((m: any) => m.phone === req.params.phone);
+  const mem = db.get('members').find((m: any) => m.phone === req.params.phone && m.is_deleted !== true);
   if (!mem) return res.status(404).json({ error: 'Member tidak ditemukan' });
   res.json(mem);
 });
@@ -24,7 +28,9 @@ loyaltyRouter.get('/members/phone/:phone', (req, res) => {
 // Create Member
 loyaltyRouter.post('/members', (req, res) => {
   const { name, phone, email } = req.body;
-  const existing = db.get('members').find((m: any) => m.phone === phone);
+  
+  // Find if exists active member with same phone
+  const existing = db.get('members').find((m: any) => m.phone === phone && m.is_deleted !== true);
   if (existing) {
     return res.status(400).json({ error: 'Nomor telepon sudah terdaftar' });
   }
@@ -38,6 +44,7 @@ loyaltyRouter.post('/members', (req, res) => {
     tier: 'Bronze',
     total_spent: 0,
     total_visits: 1,
+    is_deleted: false,
     created_at: new Date().toISOString(),
   };
 
@@ -45,11 +52,23 @@ loyaltyRouter.post('/members', (req, res) => {
   res.json(newMember);
 });
 
-// Promotions
-loyaltyRouter.get('/promotions', (req, res) => {
-  res.json(db.get('promotions'));
+// Soft Delete Member
+loyaltyRouter.delete('/members/:id', (req, res) => {
+  const id = req.params.id;
+  const member = db.get('members').find((m: any) => m.id === id);
+  if (!member) return res.status(404).json({ error: 'Member tidak ditemukan' });
+
+  db.update('members', (m: any) => m.id === id, { ...member, is_deleted: true });
+  res.json({ success: true, message: 'Member berhasil dihapus' });
 });
 
+// Promotions (Exclude soft-deleted)
+loyaltyRouter.get('/promotions', (req, res) => {
+  const promos = (db.get('promotions') || []).filter((p: any) => p.is_deleted !== true);
+  res.json(promos);
+});
+
+// Create Promotion
 loyaltyRouter.post('/promotions', (req, res) => {
   const newPromo = {
     id: `promo-${crypto.randomUUID()}`,
@@ -64,6 +83,7 @@ loyaltyRouter.post('/promotions', (req, res) => {
     is_active: req.body.is_active !== undefined ? Boolean(req.body.is_active) : true,
     member_only: req.body.member_only !== undefined ? Boolean(req.body.member_only) : false,
     min_member_tier: req.body.min_member_tier || 'all',
+    is_deleted: false,
   };
   db.insert('promotions', newPromo);
   res.json(newPromo);
@@ -90,6 +110,16 @@ loyaltyRouter.put('/promotions/:id', (req, res) => {
 
   db.update('promotions', (p: any) => p.id === id, updates);
   res.json({ ...promo, ...updates });
+});
+
+// Soft Delete Promotion
+loyaltyRouter.delete('/promotions/:id', (req, res) => {
+  const id = req.params.id;
+  const promo = db.get('promotions').find((p: any) => p.id === id);
+  if (!promo) return res.status(404).json({ error: 'Promo tidak ditemukan' });
+
+  db.update('promotions', (p: any) => p.id === id, { ...promo, is_deleted: true });
+  res.json({ success: true, message: 'Promo berhasil dihapus' });
 });
 
 // Get Loyalty Configuration
