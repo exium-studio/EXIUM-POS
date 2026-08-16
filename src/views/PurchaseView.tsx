@@ -277,6 +277,29 @@ export const PurchaseView: React.FC = () => {
     }
   };
 
+  // Connect & Disconnect Bluetooth
+  const handleConnectBT = async () => {
+    try {
+      const { bluetoothPrinter } = await import('../lib/bluetoothPrinter');
+      const dev = await bluetoothPrinter.connect();
+      setIsBtConnected(true);
+      showToast(`Printer Bluetooth ${dev.name} berhasil terhubung!`, 'success');
+    } catch (e: any) {
+      showToast(e.message || 'Gagal menghubungkan printer Bluetooth', 'error');
+    }
+  };
+
+  const handleDisconnectBT = async () => {
+    try {
+      const { bluetoothPrinter } = await import('../lib/bluetoothPrinter');
+      await bluetoothPrinter.disconnect();
+      setIsBtConnected(false);
+      showToast('Printer Bluetooth terputus', 'info');
+    } catch (e: any) {
+      showToast(e.message || 'Gagal memutuskan printer', 'error');
+    }
+  };
+
   const viewPODetails = (po: any) => {
     setSelectedPO(po);
     setPrintCustomTitle(''); // Reset custom title
@@ -862,14 +885,14 @@ export const PurchaseView: React.FC = () => {
                 Live Preview Dokumen
               </span>
               
-              {/* Paper Sheet Simulator Container */}
-              <div className="w-full flex justify-center">
+              {/* Paper Sheet Simulator Container (Styled properly so it doesn't spill out of frame) */}
+              <div className="w-full flex justify-center overflow-x-auto p-1.5">
                 <div className={`bg-white shadow-lg text-slate-800 p-6 border border-slate-300 rounded-xs select-none transition-all ${
                   printPaperSize === 'a4' 
                     ? 'w-full max-w-[420px] text-[10px]' 
                     : printPaperSize === 'thermal_80'
-                    ? 'w-[80mm] text-[9px] font-mono'
-                    : 'w-[58mm] text-[8px] font-mono'
+                    ? 'w-[280px] text-[9px] font-mono'
+                    : 'w-[200px] text-[8px] font-mono'
                 }`}>
                   {printDocType === 'surat_jalan' ? (
                     <SuratJalanPrintTemplate 
@@ -904,11 +927,26 @@ export const PurchaseView: React.FC = () => {
                     <Printer className="w-5 h-5 text-blue-600" />
                     <span>Pengaturan Cetak</span>
                   </h5>
-                  {isBtConnected && (
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-black flex items-center gap-1">
-                      <Bluetooth className="w-2.5 h-2.5" />
+                  {isBtConnected ? (
+                    <button
+                      type="button"
+                      onClick={handleDisconnectBT}
+                      className="px-2 py-0.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-black flex items-center gap-1 border border-emerald-200 transition-colors cursor-pointer"
+                      title="Putuskan Koneksi Printer"
+                    >
+                      <Bluetooth className="w-2.5 h-2.5 animate-pulse" />
                       Connected
-                    </span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleConnectBT}
+                      className="px-2 py-0.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-600 text-[9px] font-black flex items-center gap-1 border border-slate-200 transition-colors cursor-pointer"
+                      title="Sambungkan ke Printer Bluetooth"
+                    >
+                      <Bluetooth className="w-2.5 h-2.5" />
+                      Connect
+                    </button>
                   )}
                 </div>
 
@@ -1275,12 +1313,11 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({
   showSignatures = true
 }) => {
   const isThermal = size === 'thermal_80' || size === 'thermal_58';
-  const widthClass = size === 'thermal_58' ? 'w-[58mm]' : 'w-[80mm]';
   const title = customTitle.trim() || 'SURAT JALAN / WAYBILL';
 
   if (isThermal) {
     return (
-      <div className={`${widthClass} p-2 text-black font-mono text-[9px] leading-tight bg-white`}>
+      <div className="w-full p-2 text-black font-mono text-[9px] leading-tight bg-white">
         <div className="text-center font-bold border-b border-dashed border-black pb-2 mb-2">
           <span className="text-xs uppercase">{branch?.name || 'OUTLET RESTO'}</span>
           <br />
@@ -1333,7 +1370,7 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({
 
   // A4 Layout
   return (
-    <div className="w-[210mm] p-10 text-slate-800 font-sans text-xs bg-white min-h-screen">
+    <div className="w-full p-4 md:p-8 text-slate-800 font-sans text-xs bg-white">
       <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-5">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">{title}</h1>
@@ -1345,7 +1382,7 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-8 mb-6">
+      <div className="grid grid-cols-2 gap-6 mb-6">
         <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
           <span className="block text-[10px] font-bold text-gray-400 mb-1">PENGIRIM (SUPPLIER)</span>
           <span className="text-sm font-black text-slate-900 block">{po.supplier_name}</span>
@@ -1355,7 +1392,6 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({
           <span className="block text-[10px] font-bold text-gray-400 mb-1">PENERIMA (CABANG OUTLET)</span>
           <span className="text-sm font-black text-slate-900 block">{branch?.name || 'Cabang Resto'}</span>
           <span className="text-slate-600 block mt-1">{branch?.address || '-'}</span>
-          <span className="text-slate-600 block">Telp: {branch?.phone || '-'}</span>
         </div>
       </div>
 
@@ -1364,8 +1400,8 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({
         <table className="w-full text-left border border-slate-300 border-collapse">
           <thead>
             <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-300">
-              <th className="p-3 border-r border-slate-300">Nama Bahan Baku</th>
-              <th className="p-3 text-center border-r border-slate-300">Kuantitas Dipesan</th>
+              <th className="p-3 border-r border-slate-300">Nama Bahan</th>
+              <th className="p-3 text-center border-r border-slate-300">Kuantitas</th>
               {showPrices && <th className="p-3 text-right border-r border-slate-300">Harga Unit</th>}
               {showPrices && <th className="p-3 text-right border-r border-slate-300">Subtotal</th>}
               <th className="p-3">Satuan</th>
@@ -1393,20 +1429,16 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({
       )}
 
       {showSignatures && (
-        <div className="mt-16 flex justify-around text-center font-bold">
-          <div className="w-48">
+        <div className="mt-12 flex justify-around text-center font-bold">
+          <div className="w-40">
             <span>Hormat Kami,</span>
-            <br />
-            <span>Pengirim (Supplier)</span>
-            <div className="h-20"></div>
-            <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+            <div className="h-16"></div>
+            <span className="border-t border-slate-400 block pt-1.5 text-[10px]">( Pengirim )</span>
           </div>
-          <div className="w-48">
+          <div className="w-40">
             <span>Diterima Oleh,</span>
-            <br />
-            <span>Staf Restoran</span>
-            <div className="h-20"></div>
-            <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+            <div className="h-16"></div>
+            <span className="border-t border-slate-400 block pt-1.5 text-[10px]">( Staf Restoran )</span>
           </div>
         </div>
       )}
@@ -1425,12 +1457,11 @@ const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({
   showTax = true
 }) => {
   const isThermal = size === 'thermal_80' || size === 'thermal_58';
-  const widthClass = size === 'thermal_58' ? 'w-[58mm]' : 'w-[80mm]';
   const title = customTitle.trim() || 'TANDA TERIMA PEMBELIAN';
 
   if (isThermal) {
     return (
-      <div className={`${widthClass} p-2 text-black font-mono text-[9px] leading-tight bg-white`}>
+      <div className="w-full p-2 text-black font-mono text-[9px] leading-tight bg-white">
         <div className="text-center font-bold border-b border-dashed border-black pb-2 mb-2">
           <span className="text-xs uppercase">{branch?.name || 'OUTLET'}</span>
           <br />
@@ -1489,7 +1520,7 @@ const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({
 
   // A4 Layout
   return (
-    <div className="w-[210mm] p-10 text-slate-800 font-sans text-xs bg-white min-h-screen">
+    <div className="w-full p-4 md:p-8 text-slate-800 font-sans text-xs bg-white">
       <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-5">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">{title}</h1>
@@ -1501,7 +1532,7 @@ const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-8 mb-6">
+      <div className="grid grid-cols-2 gap-6 mb-6">
         <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
           <span className="block text-[10px] font-bold text-gray-400 mb-1">DITERIMA DARI (SUPPLIER)</span>
           <span className="text-sm font-black text-slate-900 block">{po.supplier_name}</span>
@@ -1563,16 +1594,16 @@ const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({
       )}
 
       {showSignatures && (
-        <div className="mt-16 flex justify-around text-center font-bold">
-          <div className="w-48">
+        <div className="mt-12 flex justify-around text-center font-bold">
+          <div className="w-40">
             <span>Supplier,</span>
-            <div className="h-20"></div>
-            <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+            <div className="h-16"></div>
+            <span className="border-t border-slate-400 block pt-1.5 text-[10px]">( Ttd Supplier )</span>
           </div>
-          <div className="w-48">
+          <div className="w-40">
             <span>Penerima (Kasir/Staff),</span>
-            <div className="h-20"></div>
-            <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+            <div className="h-16"></div>
+            <span className="border-t border-slate-400 block pt-1.5 text-[10px]">( Staf Restoran )</span>
           </div>
         </div>
       )}
