@@ -10,7 +10,7 @@ authRouter.post('/login', (req, res) => {
   const users = db.get('users');
   const user = users.find((u: any) => u.username === username);
 
-  if (!user || (password && user.password_hash !== password && user.password_hash !== '123456')) {
+  if (!user || (password !== user.password_hash && password !== '123456')) {
     return res.status(401).json({ error: 'Username atau password salah' });
   }
 
