@@ -101,8 +101,8 @@ authRouter.get('/users', (req, res) => {
 
 authRouter.post('/users', (req, res) => {
   const adminUser = getAuthUser(req);
-  if (!adminUser || (adminUser.role_id !== 'owner' && adminUser.role_id !== 'manager')) {
-    return res.status(403).json({ error: 'Hanya Owner atau Manager yang memiliki kewenangan ini' });
+  if (!adminUser || (adminUser.role_id !== 'owner' && adminUser.role_id !== 'manager' && adminUser.role_id !== 'superadmin')) {
+    return res.status(403).json({ error: 'Hanya Owner, Manager, atau Super Admin yang memiliki kewenangan ini' });
   }
 
   const { username, full_name, email, phone, role_id, branch_ids, password } = req.body;
@@ -132,8 +132,8 @@ authRouter.post('/users', (req, res) => {
 // Update employee profile (Owner/Manager authorized)
 authRouter.put('/users/:id', (req, res) => {
   const adminUser = getAuthUser(req);
-  if (!adminUser || (adminUser.role_id !== 'owner' && adminUser.role_id !== 'manager')) {
-    return res.status(403).json({ error: 'Hanya Owner atau Manager yang memiliki kewenangan ini' });
+  if (!adminUser || (adminUser.role_id !== 'owner' && adminUser.role_id !== 'manager' && adminUser.role_id !== 'superadmin')) {
+    return res.status(403).json({ error: 'Hanya Owner, Manager, atau Super Admin yang memiliki kewenangan ini' });
   }
 
   const { username, full_name, email, phone, role_id, branch_ids, password, is_active } = req.body;

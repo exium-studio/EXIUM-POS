@@ -1,6 +1,6 @@
 // TypeScript Domain Models for Nusantara POS Enterprise
 
-export type RoleType = 'owner' | 'manager' | 'cashier' | 'kitchen_food' | 'kitchen_beverage';
+export type RoleType = 'superadmin' | 'owner' | 'manager' | 'cashier' | 'kitchen_food' | 'kitchen_beverage';
 
 export interface Branch {
   id: string;

@@ -681,6 +681,46 @@ class DBStore {
         fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
       }
     }
+
+    // Ensure superadmin role and user exist, and reset owner password if requested
+    let databaseModified = false;
+
+    if (!this.data.roles) this.data.roles = [];
+    if (!this.data.roles.find((r: any) => r.id === 'superadmin')) {
+      this.data.roles.push({
+        id: 'superadmin',
+        name: 'Super Admin / Pengelola',
+        description: 'Pengelola aplikasi luar resto, reset password dan kelola akun saja'
+      });
+      databaseModified = true;
+    }
+
+    if (!this.data.users) this.data.users = [];
+    if (!this.data.users.find((u: any) => u.username === 'superadmin')) {
+      this.data.users.push({
+        id: 'user-superadmin',
+        username: 'superadmin',
+        password_hash: '123456',
+        full_name: 'System Super Admin',
+        email: 'admin@kopinusantara.id',
+        phone: '081111111111',
+        role_id: 'superadmin',
+        is_active: true,
+        branch_ids: ['branch-1', 'branch-2', 'branch-3']
+      });
+      databaseModified = true;
+    }
+
+    const ownerUser = this.data.users.find((u: any) => u.username === 'owner');
+    if (ownerUser && ownerUser.password_hash !== '123456') {
+      ownerUser.password_hash = '123456';
+      databaseModified = true;
+      console.log('Owner password successfully reset to 123456');
+    }
+
+    if (databaseModified) {
+      await this.saveDataToPostgres(this.data);
+    }
   }
 
   private async saveDataToPostgres(dataToSave: InMemoryDB) {

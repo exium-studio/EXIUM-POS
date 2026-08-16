@@ -595,6 +595,7 @@ export const SettingsView: React.FC = () => {
   // Translate role key to Indonesian readable role
   const translateRole = (roleId: string) => {
     switch (roleId) {
+      case 'superadmin': return 'Super Admin / Pengelola';
       case 'owner': return 'Owner / Direksi';
       case 'manager': return 'Manajer Cabang';
       case 'cashier': return 'Kasir Utama';
@@ -646,16 +647,18 @@ export const SettingsView: React.FC = () => {
                 <Building2 className="w-3.5 h-3.5" />
                 <span>Cabang ({branches.length})</span>
               </button>
-              <button
-                onClick={() => setActiveSubTab('employees')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  activeSubTab === 'employees' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Karyawan</span>
-              </button>
             </>
+          )}
+          {(isOwnerOrManager || user?.role_id === 'superadmin') && (
+            <button
+              onClick={() => setActiveSubTab('employees')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'employees' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-800'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Karyawan</span>
+            </button>
           )}
         </div>
       </div>
@@ -1324,7 +1327,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ==================== SUBTAB: EMPLOYEES ==================== */}
-      {activeSubTab === 'employees' && isOwnerOrManager && (
+      {activeSubTab === 'employees' && (isOwnerOrManager || user?.role_id === 'superadmin') && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-slate-800 text-sm">Manajemen Akun Karyawan</h4>
@@ -1807,6 +1810,7 @@ export const SettingsView: React.FC = () => {
                     onChange={(e) => setNewEmpRole(e.target.value)}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-slate-800 focus:outline-none transition-colors cursor-pointer"
                   >
+                    <option value="superadmin">Super Admin / Pengelola</option>
                     <option value="owner">Owner / Direksi</option>
                     <option value="manager">Manajer Cabang</option>
                     <option value="cashier">Kasir Utama</option>
@@ -1937,6 +1941,7 @@ export const SettingsView: React.FC = () => {
                     onChange={(e) => setEditEmpRole(e.target.value)}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl font-bold text-slate-800 focus:outline-none transition-colors cursor-pointer"
                   >
+                    <option value="superadmin">Super Admin / Pengelola</option>
                     <option value="owner">Owner / Direksi</option>
                     <option value="manager">Manajer Cabang</option>
                     <option value="cashier">Kasir Utama</option>
