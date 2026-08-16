@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
+import { bluetoothPrinter } from '../lib/bluetoothPrinter';
 import { ShoppingCart, Plus, CheckCircle2, Clock, Truck, RefreshCw, Trash2, Calendar, X, Eye, FileText, Edit2, Users, BarChart3, Printer, Bluetooth } from 'lucide-react';
 
 export const PurchaseView: React.FC = () => {
@@ -72,14 +73,10 @@ export const PurchaseView: React.FC = () => {
 
   // Monitor Bluetooth Status
   useEffect(() => {
-    import('../lib/bluetoothPrinter').then(({ bluetoothPrinter }) => {
-      setIsBtConnected(bluetoothPrinter.isConnected());
-    }).catch(() => {});
+    setIsBtConnected(bluetoothPrinter.isConnected());
 
     const handleStatusChange = () => {
-      import('../lib/bluetoothPrinter').then(({ bluetoothPrinter }) => {
-        setIsBtConnected(bluetoothPrinter.isConnected());
-      }).catch(() => {});
+      setIsBtConnected(bluetoothPrinter.isConnected());
     };
 
     window.addEventListener('bluetooth_printer_status_changed', handleStatusChange);
@@ -277,29 +274,6 @@ export const PurchaseView: React.FC = () => {
     }
   };
 
-  // Connect & Disconnect Bluetooth
-  const handleConnectBT = async () => {
-    try {
-      const { bluetoothPrinter } = await import('../lib/bluetoothPrinter');
-      const dev = await bluetoothPrinter.connect();
-      setIsBtConnected(true);
-      showToast(`Printer Bluetooth ${dev.name} berhasil terhubung!`, 'success');
-    } catch (e: any) {
-      showToast(e.message || 'Gagal menghubungkan printer Bluetooth', 'error');
-    }
-  };
-
-  const handleDisconnectBT = async () => {
-    try {
-      const { bluetoothPrinter } = await import('../lib/bluetoothPrinter');
-      await bluetoothPrinter.disconnect();
-      setIsBtConnected(false);
-      showToast('Printer Bluetooth terputus', 'info');
-    } catch (e: any) {
-      showToast(e.message || 'Gagal memutuskan printer', 'error');
-    }
-  };
-
   const viewPODetails = (po: any) => {
     setSelectedPO(po);
     setPrintCustomTitle(''); // Reset custom title
@@ -412,7 +386,6 @@ export const PurchaseView: React.FC = () => {
     } else {
       // Thermal printer size - attempt direct Bluetooth printing
       try {
-        const { bluetoothPrinter } = await import('../lib/bluetoothPrinter');
         if (bluetoothPrinter.isConnected()) {
           const text = formatPOTextForBluetooth(
             selectedPO,
@@ -928,25 +901,15 @@ export const PurchaseView: React.FC = () => {
                     <span>Pengaturan Cetak</span>
                   </h5>
                   {isBtConnected ? (
-                    <button
-                      type="button"
-                      onClick={handleDisconnectBT}
-                      className="px-2 py-0.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-black flex items-center gap-1 border border-emerald-200 transition-colors cursor-pointer"
-                      title="Putuskan Koneksi Printer"
-                    >
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-black flex items-center gap-1 border border-emerald-200">
                       <Bluetooth className="w-2.5 h-2.5 animate-pulse" />
                       Connected
-                    </button>
+                    </span>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleConnectBT}
-                      className="px-2 py-0.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-600 text-[9px] font-black flex items-center gap-1 border border-slate-200 transition-colors cursor-pointer"
-                      title="Sambungkan ke Printer Bluetooth"
-                    >
+                    <span className="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 text-[9px] font-black flex items-center gap-1 border border-slate-200" title="Hubungkan via Navbar">
                       <Bluetooth className="w-2.5 h-2.5" />
-                      Connect
-                    </button>
+                      Offline
+                    </span>
                   )}
                 </div>
 

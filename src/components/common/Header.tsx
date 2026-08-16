@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { usePOS } from '../../context/POSContext';
+import { useToast } from '../../context/ToastContext';
 import { RoleType } from '../../types';
 import { usePWA } from '../../lib/pwa';
 import { PWAModal } from './PWAModal';
+import { bluetoothPrinter } from '../../lib/bluetoothPrinter';
 import {
   Building2,
   Wifi,
@@ -15,6 +17,9 @@ import {
   Smartphone,
   Download,
   Menu,
+  Bluetooth,
+  X,
+  Printer,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -26,9 +31,34 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
   const { branches, activeBranchId, setActiveBranchId, user, logout } = useAuth();
   const { isOffline, setIsOffline, pendingSyncCount, triggerSync, activeShift } = usePOS();
   const { isInstalled, isInstallable, isUpdateAvailable } = usePWA();
+  const { showToast } = useToast();
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showPWAModal, setShowPWAModal] = useState(false);
+
+  // Bluetooth Printer states
+  const [showBluetoothModal, setShowBluetoothModal] = useState(false);
+  const [isBtConnected, setIsBtConnected] = useState(false);
+  const [pairedDevice, setPairedDevice] = useState<any>(null);
+  const [isBtSupported, setIsBtSupported] = useState(false);
+  const [btLoading, setBtLoading] = useState(false);
+
+  useEffect(() => {
+    setIsBtSupported(bluetoothPrinter.isSupported());
+    setIsBtConnected(bluetoothPrinter.isConnected());
+    setPairedDevice(bluetoothPrinter.getPairedDevice());
+
+    const handleStatusChange = () => {
+      setIsBtConnected(bluetoothPrinter.isConnected());
+      setPairedDevice(bluetoothPrinter.getPairedDevice());
+    };
+
+    window.addEventListener('bluetooth_printer_status_changed', handleStatusChange);
+    return () => {
+      window.removeEventListener('bluetooth_printer_status_changed', handleStatusChange);
+    };
+  }, []);
 
   const handleManualSync = async () => {
     setIsSyncing(true);
@@ -36,20 +66,65 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
     setIsSyncing(false);
   };
 
-  const rolesList: { id: RoleType; label: string }[] = [
-    { id: 'owner', label: 'Owner / Direksi (Full Access)' },
-    { id: 'manager', label: 'Manajer Cabang' },
-    { id: 'cashier', label: 'Kasir Utama' },
-    { id: 'kitchen_food', label: 'Dapur Makanan (KDS Food)' },
-    { id: 'kitchen_beverage', label: 'Dapur Minuman / Bar (KDS Bar)' },
-  ];
+  const handleConnectPrinter = async () => {
+    setBtLoading(true);
+    try {
+      const dev = await bluetoothPrinter.connect();
+      setIsBtConnected(true);
+      setPairedDevice(dev);
+      showToast(`Printer Bluetooth "${dev.name}" berhasil terhubung!`, 'success');
+    } catch (e: any) {
+      showToast(e.message || 'Gagal menghubungkan printer Bluetooth', 'error');
+    } finally {
+      setBtLoading(false);
+    }
+  };
+
+  const handleDisconnectPrinter = async () => {
+    try {
+      await bluetoothPrinter.disconnect();
+      setIsBtConnected(false);
+      setPairedDevice(null);
+      showToast('Printer Bluetooth terputus', 'info');
+    } catch (e: any) {
+      showToast(e.message || 'Gagal memutuskan printer', 'error');
+    }
+  };
+
+  const handlePrintTest = async () => {
+    if (!isBtConnected) {
+      showToast('Hubungkan printer Bluetooth terlebih dahulu', 'error');
+      return;
+    }
+    setBtLoading(true);
+    try {
+      const lines = [];
+      lines.push('================================');
+      lines.push('       Nusantara POS System     ');
+      lines.push('       UJI COBA CETAK STRUK     ');
+      lines.push('================================');
+      lines.push(`Tanggal : ${new Date().toLocaleDateString('id-ID')}`);
+      lines.push(`Waktu   : ${new Date().toLocaleTimeString('id-ID')}`);
+      lines.push('--------------------------------');
+      lines.push('Printer : ' + (pairedDevice?.name || 'GATT Printer'));
+      lines.push('Koneksi : BERHASIL');
+      lines.push('================================');
+      lines.push('\n\n\n');
+      
+      await bluetoothPrinter.print(lines.join('\n'));
+      showToast('Test print berhasil dikirim ke printer!', 'success');
+    } catch (e: any) {
+      showToast(e.message || 'Test print gagal', 'error');
+    } finally {
+      setBtLoading(false);
+    }
+  };
 
   return (
     <>
       <header className="h-16 bg-white border-b border-gray-200 px-3 sm:px-4 md:px-6 flex items-center justify-between z-30 sticky top-0 shrink-0">
         {/* Brand, Mobile Menu Button & Branch Selector */}
         <div className="flex items-center space-x-2 sm:space-x-4">
-          {/* Mobile Hamburger Drawer Toggle */}
           <button
             onClick={onToggleMobileMenu}
             className="lg:hidden p-2 rounded-xl text-gray-700 hover:bg-gray-100 active:scale-95 transition-all border border-gray-200 shadow-2xs"
@@ -58,7 +133,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
             <Menu className="w-5 h-5" />
           </button>
 
-          {/* Brand Name */}
           <div className="flex items-center">
             <h1 className="text-xl sm:text-2xl font-black text-[#1E293B] tracking-tight leading-none px-1">
               POS
@@ -84,12 +158,28 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
           </div>
         </div>
 
-        {/* Right Controls: Cloud Sync, Shift, PWA, Role Switcher */}
+        {/* Right Controls: Cloud Sync, Shift, Bluetooth, PWA, Role Switcher */}
         <div className="flex items-center space-x-1.5 sm:space-x-3 md:space-x-4">
+          {/* Bluetooth Connection Quick Status Badge & Popup trigger */}
+          {isBtSupported && (
+            <button
+              onClick={() => setShowBluetoothModal(true)}
+              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all border cursor-pointer ${
+                isBtConnected
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-slate-50 text-slate-600 border-gray-200 hover:bg-slate-100'
+              }`}
+              title="Hubungkan & Atur Printer Bluetooth"
+            >
+              <Bluetooth className={`w-3.5 h-3.5 ${isBtConnected ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`} />
+              <span className="hidden md:inline">{isBtConnected ? pairedDevice?.name : 'Connect Printer'}</span>
+            </button>
+          )}
+
           {/* PWA App Button */}
           <button
             onClick={() => setShowPWAModal(true)}
-            className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold transition-colors border ${
+            className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-colors border cursor-pointer ${
               isUpdateAvailable
                 ? 'bg-blue-600 text-white border-blue-700 animate-bounce'
                 : isInstalled
@@ -107,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
           {activeShift ? (
             <button
               onClick={onOpenShiftModal}
-              className="hidden sm:flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full text-[11px] sm:text-xs font-bold hover:bg-emerald-100 transition-colors"
+              className="hidden sm:flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-[11px] sm:text-xs font-bold hover:bg-emerald-100 transition-colors"
               title="Klik untuk kelola kas / tutup shift"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -117,7 +207,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
           ) : (
             <button
               onClick={onOpenShiftModal}
-              className="hidden sm:flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-[11px] sm:text-xs font-bold hover:bg-amber-100 transition-colors"
+              className="hidden sm:flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[11px] sm:text-xs font-bold hover:bg-amber-100 transition-colors"
             >
               <Clock className="w-3.5 h-3.5" />
               <span>Buka Shift</span>
@@ -125,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
           )}
 
           {/* Cloud Sync Status */}
-          <div className="flex items-center gap-1.5 bg-green-50 px-2 sm:px-3 py-1 rounded-full border border-green-200">
+          <div className="flex items-center gap-1.5 bg-green-50 px-2 sm:px-3 py-1.5 rounded-xl border border-green-200">
             <div className={`w-2 h-2 rounded-full ${isOffline ? 'bg-red-500' : 'bg-green-500'}`} />
             <span className="text-[10px] sm:text-[11px] font-bold text-green-700 uppercase tracking-wider hidden md:inline">
               {isOffline ? 'Offline' : 'Synced'}
@@ -135,7 +225,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
           {/* Offline / Online Quick Toggle */}
           <button
             onClick={() => setIsOffline(!isOffline)}
-            className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${
+            className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
               isOffline
                 ? 'bg-red-50 text-red-700 border-red-200'
                 : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
@@ -150,7 +240,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
             <button
               onClick={handleManualSync}
               disabled={isOffline || isSyncing}
-              className="flex items-center space-x-1 px-2 sm:px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+              className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
               title="Sinkronkan antrian transaksi"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -214,6 +304,96 @@ export const Header: React.FC<HeaderProps> = ({ onOpenShiftModal, onToggleMobile
 
       {/* PWA Modal */}
       <PWAModal isOpen={showPWAModal} onClose={() => setShowPWAModal(false)} />
+
+      {/* ==================== BLUETOOTH PRINTER POPUP MODAL ==================== */}
+      {showBluetoothModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h5 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                <Bluetooth className="w-5 h-5 text-blue-600" />
+                <span>Konektivitas Printer Bluetooth</span>
+              </h5>
+              <button onClick={() => setShowBluetoothModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm cursor-pointer">✕</button>
+            </div>
+
+            <div className="p-6 space-y-5 text-xs font-semibold text-slate-700">
+              {/* Status Section */}
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="block text-[10px] text-gray-400">STATUS KONEKSI</span>
+                  <span className={`text-xs font-black ${isBtConnected ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {isBtConnected ? 'Terhubung (Ready)' : 'Terputus'}
+                  </span>
+                </div>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isBtConnected ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                  <Bluetooth className={`w-4 h-4 ${isBtConnected ? 'animate-pulse' : ''}`} />
+                </div>
+              </div>
+
+              {isBtConnected && pairedDevice && (
+                <div className="space-y-1">
+                  <span className="text-[10px] text-gray-400 uppercase">Perangkat Terhubung</span>
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-2">
+                    <Printer className="w-4 h-4 text-blue-600" />
+                    <div>
+                      <p className="font-bold text-slate-900">{pairedDevice.name}</p>
+                      <p className="text-[9px] text-slate-500 font-mono">ID: {pairedDevice.id || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                {!isBtConnected ? (
+                  <button
+                    type="button"
+                    disabled={btLoading}
+                    onClick={handleConnectPrinter}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Bluetooth className="w-4 h-4" />
+                    <span>{btLoading ? 'Menghubungkan...' : 'Sambungkan Printer'}</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={btLoading}
+                      onClick={handlePrintTest}
+                      className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Cetak Struk Uji Coba</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDisconnectPrinter}
+                      className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-red-200"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Putuskan Koneksi</span>
+                    </button>
+                  </>
+                )}
+                
+                <button
+                  type="button"
+                  onClick={() => setShowBluetoothModal(false)}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+
+              <p className="text-[10px] text-gray-400 text-center font-medium leading-normal">
+                Gunakan Google Chrome, Microsoft Edge, atau Opera untuk mengaktifkan cetak Bluetooth langsung dari PWA.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
