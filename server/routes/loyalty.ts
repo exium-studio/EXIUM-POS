@@ -61,10 +61,35 @@ loyaltyRouter.post('/promotions', (req, res) => {
     applicable_category_id: req.body.applicable_category_id || null,
     start_hour: req.body.start_hour || null,
     end_hour: req.body.end_hour || null,
-    is_active: true,
+    is_active: req.body.is_active !== undefined ? Boolean(req.body.is_active) : true,
+    member_only: req.body.member_only !== undefined ? Boolean(req.body.member_only) : false,
+    min_member_tier: req.body.min_member_tier || 'all',
   };
   db.insert('promotions', newPromo);
   res.json(newPromo);
+});
+
+// Update or toggle Promotion
+loyaltyRouter.put('/promotions/:id', (req, res) => {
+  const id = req.params.id;
+  const promo = db.get('promotions').find((p: any) => p.id === id);
+  if (!promo) return res.status(404).json({ error: 'Promo tidak ditemukan' });
+
+  const updates = {
+    code: req.body.code !== undefined ? req.body.code?.toUpperCase() : promo.code,
+    name: req.body.name !== undefined ? req.body.name : promo.name,
+    promo_type: req.body.promo_type !== undefined ? req.body.promo_type : promo.promo_type,
+    discount_value: req.body.discount_value !== undefined ? Number(req.body.discount_value) : promo.discount_value,
+    min_order_amount: req.body.min_order_amount !== undefined ? Number(req.body.min_order_amount) : promo.min_order_amount,
+    start_hour: req.body.start_hour !== undefined ? req.body.start_hour : promo.start_hour,
+    end_hour: req.body.end_hour !== undefined ? req.body.end_hour : promo.end_hour,
+    is_active: req.body.is_active !== undefined ? Boolean(req.body.is_active) : promo.is_active,
+    member_only: req.body.member_only !== undefined ? Boolean(req.body.member_only) : promo.member_only,
+    min_member_tier: req.body.min_member_tier !== undefined ? req.body.min_member_tier : promo.min_member_tier,
+  };
+
+  db.update('promotions', (p: any) => p.id === id, updates);
+  res.json({ ...promo, ...updates });
 });
 
 // Get Loyalty Configuration

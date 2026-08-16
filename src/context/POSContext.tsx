@@ -92,6 +92,36 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // Check applied promo validation reactively
+  useEffect(() => {
+    if (appliedPromo) {
+      let valid = true;
+      if (appliedPromo.is_active === false) {
+        valid = false;
+      }
+      if (appliedPromo.member_only) {
+        if (!selectedMember) {
+          valid = false;
+        } else if (appliedPromo.min_member_tier && appliedPromo.min_member_tier !== 'all') {
+          const getTierPriority = (t: string) => {
+            const low = String(t).toLowerCase();
+            if (low === 'platinum') return 4;
+            if (low === 'gold') return 3;
+            if (low === 'silver') return 2;
+            if (low === 'bronze') return 1;
+            return 0;
+          };
+          if (getTierPriority(selectedMember.tier) < getTierPriority(appliedPromo.min_member_tier)) {
+            valid = false;
+          }
+        }
+      }
+      if (!valid) {
+        setAppliedPromo(null);
+      }
+    }
+  }, [appliedPromo, selectedMember]);
+
   const updatePendingCount = async () => {
     try {
       const count = await localDB.sync_queue.where('status').equals('pending').count();
@@ -284,7 +314,32 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   let discountAmount = 0;
   // 1. Promo discount
-  if (appliedPromo && subtotal >= appliedPromo.min_order_amount) {
+  let isPromoValid = false;
+  if (appliedPromo && subtotal >= appliedPromo.min_order_amount && appliedPromo.is_active !== false) {
+    let checkPass = true;
+    if (appliedPromo.member_only) {
+      if (!selectedMember) {
+        checkPass = false;
+      } else if (appliedPromo.min_member_tier && appliedPromo.min_member_tier !== 'all') {
+        const getTierPriority = (t: string) => {
+          const low = String(t).toLowerCase();
+          if (low === 'platinum') return 4;
+          if (low === 'gold') return 3;
+          if (low === 'silver') return 2;
+          if (low === 'bronze') return 1;
+          return 0;
+        };
+        if (getTierPriority(selectedMember.tier) < getTierPriority(appliedPromo.min_member_tier)) {
+          checkPass = false;
+        }
+      }
+    }
+    if (checkPass) {
+      isPromoValid = true;
+    }
+  }
+
+  if (isPromoValid && appliedPromo) {
     if (appliedPromo.promo_type === 'percentage_discount') {
       discountAmount += (subtotal * appliedPromo.discount_value) / 100;
     } else if (appliedPromo.promo_type === 'fixed_amount' || appliedPromo.promo_type === 'bogo') {

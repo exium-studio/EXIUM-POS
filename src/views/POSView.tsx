@@ -1262,28 +1262,61 @@ export const POSView: React.FC<{ onOpenShiftModal: () => void }> = ({ onOpenShif
                 ✕
               </button>
             </div>
-            <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
-              {availablePromos.map((promo) => (
-                <div
-                  key={promo.id}
-                  onClick={() => {
-                    setAppliedPromo(promo);
-                    setShowPromoModal(false);
-                  }}
-                  className="p-3 bg-gray-50 hover:bg-blue-50 border border-gray-200 rounded-xl cursor-pointer flex items-center justify-between transition-colors"
-                >
-                  <div>
-                    <span className="font-bold text-blue-800 text-xs bg-blue-100 px-2 py-0.5 rounded">
-                      {promo.code}
+            <div className="p-4 space-y-2 max-h-80 overflow-y-auto text-xs">
+              {availablePromos.filter((p: any) => p.is_active !== false).length === 0 ? (
+                <div className="text-center p-4 text-gray-400">Tidak ada voucher promo aktif tersedia</div>
+              ) : (
+                availablePromos.filter((p: any) => p.is_active !== false).map((promo) => (
+                  <div
+                    key={promo.id}
+                    onClick={() => {
+                      // Validate Member Only Condition
+                      if (promo.member_only && !selectedMember) {
+                        setToastMessage('Voucher ini hanya berlaku untuk Member terdaftar!');
+                        return;
+                      }
+                      // Validate Member Tier Condition
+                      if (promo.member_only && promo.min_member_tier && promo.min_member_tier !== 'all') {
+                        const getTierPriority = (t: string) => {
+                          const low = String(t).toLowerCase();
+                          if (low === 'platinum') return 4;
+                          if (low === 'gold') return 3;
+                          if (low === 'silver') return 2;
+                          if (low === 'bronze') return 1;
+                          return 0;
+                        };
+                        const memberTier = selectedMember ? selectedMember.tier : '';
+                        if (getTierPriority(memberTier) < getTierPriority(promo.min_member_tier)) {
+                          setToastMessage(`Voucher ini hanya berlaku untuk Member tier ${promo.min_member_tier} ke atas!`);
+                          return;
+                        }
+                      }
+
+                      setAppliedPromo(promo);
+                      setShowPromoModal(false);
+                    }}
+                    className="p-3 bg-gray-50 hover:bg-blue-50 border border-gray-200 rounded-xl cursor-pointer flex items-center justify-between transition-colors"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-blue-800 text-[10px] bg-blue-100 px-2 py-0.5 rounded">
+                          {promo.code}
+                        </span>
+                        {promo.member_only && (
+                          <span className="text-[9px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                            Member {promo.min_member_tier !== 'all' ? `Min. ${promo.min_member_tier}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs font-bold text-[#1E293B] mt-1">{promo.name}</p>
+                      <p className="text-[10px] text-gray-400 font-medium">Min. Pembelian: Rp {promo.min_order_amount.toLocaleString('id-ID')}</p>
+                    </div>
+                    <span className="text-xs font-black text-green-700">
+                      {promo.promo_type === 'percentage_discount' ? `${promo.discount_value}% OFF` : `Potongan Rp ${promo.discount_value.toLocaleString('id-ID')}`}
                     </span>
-                    <p className="text-xs font-bold text-[#1E293B] mt-1">{promo.name}</p>
-                    <p className="text-[10px] text-gray-400">Min. Pembelian: Rp {promo.min_order_amount.toLocaleString('id-ID')}</p>
                   </div>
-                  <span className="text-xs font-bold text-green-700">
-                    {promo.promo_type === 'percentage_discount' ? `${promo.discount_value}% OFF` : `Potongan Rp ${promo.discount_value.toLocaleString('id-ID')}`}
-                  </span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

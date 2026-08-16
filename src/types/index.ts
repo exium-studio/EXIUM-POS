@@ -360,6 +360,8 @@ export interface Promotion {
   start_date?: string;
   end_date?: string;
   is_active: boolean;
+  member_only?: boolean;
+  min_member_tier?: string;
 }
 
 export interface CartItemModifier {
