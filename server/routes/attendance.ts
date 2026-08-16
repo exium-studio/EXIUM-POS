@@ -19,11 +19,24 @@ attendanceRouter.get('/logs', (req, res) => {
     attendances = attendances.filter((a: any) => a.user_id === user_id);
   }
 
-  const enriched = attendances.map((a: any) => ({
-    ...a,
-    branch_name: branches.find((b: any) => b.id === a.branch_id)?.name,
-    user_name: users.find((u: any) => u.id === a.user_id)?.full_name,
-  }));
+  const enriched = attendances.map((a: any) => {
+    // Calculate total hours if clocked out
+    let total_hours = 0;
+    if (a.clock_in && a.clock_out) {
+      const diffMs = new Date(a.clock_out).getTime() - new Date(a.clock_in).getTime();
+      total_hours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10; // 1 decimal place
+    }
+
+    return {
+      ...a,
+      branch_name: branches.find((b: any) => b.id === a.branch_id)?.name,
+      user_name: users.find((u: any) => u.id === a.user_id)?.full_name,
+      check_in_time: a.clock_in,
+      check_out_time: a.clock_out,
+      total_hours: total_hours || null,
+      status: a.clock_out ? 'selesai' : 'present', // if clocked out 'selesai', if still clocked in 'present' (Hadir)
+    };
+  });
 
   res.json(enriched.reverse());
 });

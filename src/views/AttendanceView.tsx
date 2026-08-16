@@ -128,9 +128,11 @@ export const AttendanceView: React.FC = () => {
               {logs.map((l) => (
                 <tr key={l.id} className="hover:bg-gray-50/70 transition-colors">
                   <td className="py-3 px-4 font-bold text-gray-900">{l.user_name}</td>
-                  <td className="py-3 px-4 text-green-700 font-mono">{new Date(l.check_in_time).toLocaleTimeString('id-ID')}</td>
+                  <td className="py-3 px-4 text-green-700 font-mono">
+                    {l.check_in_time && !isNaN(new Date(l.check_in_time).getTime()) ? new Date(l.check_in_time).toLocaleTimeString('id-ID') : '-'}
+                  </td>
                   <td className="py-3 px-4 text-red-700 font-mono">
-                    {l.check_out_time ? new Date(l.check_out_time).toLocaleTimeString('id-ID') : '-'}
+                    {l.check_out_time && !isNaN(new Date(l.check_out_time).getTime()) ? new Date(l.check_out_time).toLocaleTimeString('id-ID') : '-'}
                   </td>
                   <td className="py-3 px-4 font-mono font-bold text-gray-900">
                     {l.total_hours ? `${l.total_hours} Jam` : 'Sedang Bertugas'}
@@ -138,10 +140,10 @@ export const AttendanceView: React.FC = () => {
                   <td className="py-3 px-4">
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        l.status === 'present' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+                        (l.status || 'present') === 'present' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
                       }`}
                     >
-                      {l.status === 'present' ? 'HADIR' : l.status.toUpperCase()}
+                      {(l.status || 'present') === 'present' ? 'HADIR' : String(l.status).toUpperCase()}
                     </span>
                   </td>
                 </tr>
