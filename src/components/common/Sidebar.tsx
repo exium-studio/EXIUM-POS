@@ -69,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // Menu, Resep & Stok
     { id: 'products', label: 'Menu & Resep (BOM)', icon: Coffee, category: 'Inventory & BOM', show: user?.role_id === 'owner' || user?.role_id === 'manager' },
     { id: 'stock', label: 'Bahan Baku & Stok', icon: Package, category: 'Inventory & BOM', show: hasPermission('stock.view') },
-    { id: 'purchase', label: 'Pembelian (PO)', icon: ShoppingCart, category: 'Inventory & BOM', show: hasPermission('purchase.create') || user?.role_id === 'owner' },
+    { id: 'purchase', label: 'Pembelian (PO)', icon: ShoppingCart, category: 'Inventory & BOM', show: hasPermission('purchase.create') || user?.role_id === 'owner' || user?.role_id === 'cashier' },
 
     // Akuntansi, Member & HR
     { id: 'accounting', label: 'Accounting & Pajak', icon: Calculator, category: 'Financial & HR', show: hasPermission('accounting.view') || user?.role_id === 'owner' },

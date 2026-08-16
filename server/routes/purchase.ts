@@ -25,16 +25,53 @@ purchaseRouter.post('/suppliers', (req, res) => {
   res.json(newSupplier);
 });
 
-// Purchase Orders list
+// Purchase Orders list with Date Filters
 purchaseRouter.get('/orders', (req, res) => {
   const branch_id = req.query.branch_id as string;
-  let pos = db.get('purchase_orders');
-  const branches = db.get('branches');
-  const suppliers = db.get('suppliers');
-  const users = db.get('users');
+  const filter = req.query.filter as string || 'today';
+  const start_date = req.query.start_date as string;
+  const end_date = req.query.end_date as string;
 
+  let pos = db.get('purchase_orders') || [];
+  const branches = db.get('branches') || [];
+  const suppliers = db.get('suppliers') || [];
+  const users = db.get('users') || [];
+
+  // Filter by branch
   if (branch_id && branch_id !== 'all') {
     pos = pos.filter((p: any) => p.branch_id === branch_id);
+  }
+
+  // Filter by date range
+  const now = new Date();
+  if (filter === 'today') {
+    const todayStr = now.toISOString().split('T')[0];
+    pos = pos.filter((p: any) => p.created_at?.startsWith(todayStr));
+  } else if (filter === 'week') {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // start of week is Monday
+    const startOfWeek = new Date(now.setDate(diff));
+    startOfWeek.setHours(0, 0, 0, 0);
+    pos = pos.filter((p: any) => {
+      if (!p.created_at) return false;
+      return new Date(p.created_at) >= startOfWeek;
+    });
+  } else if (filter === 'month') {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    pos = pos.filter((p: any) => {
+      if (!p.created_at) return false;
+      return new Date(p.created_at) >= startOfMonth;
+    });
+  } else if (filter === 'custom' && start_date && end_date) {
+    const start = new Date(start_date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(end_date);
+    end.setHours(23, 59, 59, 999);
+    pos = pos.filter((p: any) => {
+      if (!p.created_at) return false;
+      const pDate = new Date(p.created_at);
+      return pDate >= start && pDate <= end;
+    });
   }
 
   const enriched = pos.map((p: any) => ({
@@ -86,7 +123,7 @@ purchaseRouter.post('/orders', (req, res) => {
     payment_status: 'unpaid',
     notes,
     created_by: user_id || 'user-mgr-jkt',
-    approved_by: auto_approve ? user_id : null,
+    approved_by: auto_approve ? (user_id || 'user-mgr-jkt') : null,
     approved_at: auto_approve ? new Date().toISOString() : null,
     due_date: due_date || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
     created_at: new Date().toISOString(),
@@ -115,14 +152,14 @@ purchaseRouter.post('/orders/:id/approve', (req, res) => {
   res.json(po);
 });
 
-// Receive Goods (Goods Receipt) -> Auto increases stock & records accounting journal
-purchaseRouter.post('/orders/:id/receive', (req, res) => {
-  const { user_id, supplier_invoice_number, received_items, notes } = req.body;
-  const po = db.get('purchase_orders').find((p: any) => p.id === req.params.id);
+// Receive Goods (Goods Receipt) -> Supports body po_id (from frontend call) or params
+purchaseRouter.post('/receive', (req, res) => {
+  const { po_id, user_id, supplier_invoice_number, received_items, notes } = req.body;
+  const po = db.get('purchase_orders').find((p: any) => p.id === po_id);
   if (!po) return res.status(404).json({ error: 'PO tidak ditemukan' });
 
   const receipt_number = `GR-${Date.now().toString().slice(-6)}`;
-  const stockBranches = db.get('stock_branch');
+  const stockBranches = db.get('stock_branch') || [];
 
   // Update received quantities
   for (const poi of po.items) {
@@ -159,7 +196,7 @@ purchaseRouter.post('/orders/:id/receive', (req, res) => {
       total_cost: qtyReceived * poi.unit_price,
       reference_id: po.po_number,
       notes: `Penerimaan Barang PO ${po.po_number} (Surat Jalan/Inv: ${supplier_invoice_number || '-'})`,
-      created_by: user_id,
+      created_by: user_id || 'user-mgr-jkt',
       created_at: new Date().toISOString(),
     });
   }
@@ -175,18 +212,25 @@ purchaseRouter.post('/orders/:id/receive', (req, res) => {
     receipt_number,
     po_id: po.id,
     branch_id: po.branch_id,
-    supplier_invoice_number,
+    supplier_invoice_number: supplier_invoice_number || '',
     received_date: new Date().toISOString(),
-    received_by: user_id,
-    notes,
+    received_by: user_id || 'user-mgr-jkt',
+    notes: notes || '',
   };
   db.insert('goods_receipts', gr);
 
   // Auto-record double entry accounting journal: Persediaan (Debit) vs Hutang Usaha (Credit)
-  const suppliers = db.get('suppliers');
+  const suppliers = db.get('suppliers') || [];
   const supplier = suppliers.find((s: any) => s.id === po.supplier_id);
   po.supplier_name = supplier?.name;
-  recordGoodsReceiptJournal(po, po.branch_id, user_id);
+  recordGoodsReceiptJournal(po, po.branch_id, user_id || 'user-mgr-jkt');
 
   res.json({ po, goods_receipt: gr });
+});
+
+// Legacy params receive support just in case
+purchaseRouter.post('/orders/:id/receive', (req, res) => {
+  req.body.po_id = req.params.id;
+  const url = req.url.replace(`/orders/${req.params.id}/receive`, '/receive');
+  res.redirect(307, url);
 });
