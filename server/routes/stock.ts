@@ -4,10 +4,10 @@ import crypto from 'crypto';
 
 export const stockRouter = Router();
 
-// Get ingredients list with active branch stock
+// Get ingredients list with active branch stock (Exclude soft-deleted)
 stockRouter.get('/ingredients', (req, res) => {
   const branch_id = (req.query.branch_id as string) || 'branch-1';
-  const ingredients = db.get('ingredients');
+  const ingredients = (db.get('ingredients') || []).filter((ing: any) => ing.is_deleted !== true);
   const stockBranches = db.get('stock_branch').filter((s: any) => s.branch_id === branch_id);
 
   const enriched = ingredients.map((ing: any) => {
@@ -32,12 +32,13 @@ stockRouter.post('/ingredients', (req, res) => {
     base_unit: req.body.base_unit || 'gram',
     cost_per_unit: Number(req.body.cost_per_unit) || 0,
     min_stock_alert: Number(req.body.min_stock_alert) || 100,
+    is_deleted: false,
   };
 
   db.insert('ingredients', newIng);
 
   // Initialize stock for all branches
-  const branches = db.get('branches');
+  const branches = db.get('branches') || [];
   for (const b of branches) {
     db.insert('stock_branch', {
       id: `stk-${crypto.randomUUID()}`,
@@ -51,6 +52,34 @@ stockRouter.post('/ingredients', (req, res) => {
   }
 
   res.json(newIng);
+});
+
+// Update ingredient
+stockRouter.put('/ingredients/:id', (req, res) => {
+  const id = req.params.id;
+  const ing = db.get('ingredients').find((i: any) => i.id === id);
+  if (!ing) return res.status(404).json({ error: 'Bahan baku tidak ditemukan' });
+
+  const updates = {
+    name: req.body.name !== undefined ? req.body.name : ing.name,
+    category: req.body.category !== undefined ? req.body.category : ing.category,
+    base_unit: req.body.base_unit !== undefined ? req.body.base_unit : ing.base_unit,
+    cost_per_unit: req.body.cost_per_unit !== undefined ? Number(req.body.cost_per_unit) : ing.cost_per_unit,
+    min_stock_alert: req.body.min_stock_alert !== undefined ? Number(req.body.min_stock_alert) : ing.min_stock_alert,
+  };
+
+  db.update('ingredients', (i: any) => i.id === id, updates);
+  res.json({ ...ing, ...updates });
+});
+
+// Soft Delete ingredient
+stockRouter.delete('/ingredients/:id', (req, res) => {
+  const id = req.params.id;
+  const ing = db.get('ingredients').find((i: any) => i.id === id);
+  if (!ing) return res.status(404).json({ error: 'Bahan baku tidak ditemukan' });
+
+  db.update('ingredients', (i: any) => i.id === id, { ...ing, is_deleted: true });
+  res.json({ success: true, message: 'Bahan baku berhasil dihapus' });
 });
 
 // Get stock movements (Kartu Stok)
