@@ -70,9 +70,20 @@ html, body, #root {
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
     background: white;
     color: black;
+  }
+
+  #po-print-area.size-a4 {
+    width: 210mm;
+  }
+
+  #po-print-area.size-thermal_80 {
+    width: 80mm;
+  }
+
+  #po-print-area.size-thermal_58 {
+    width: 58mm;
   }
 
   #thermal-receipt {

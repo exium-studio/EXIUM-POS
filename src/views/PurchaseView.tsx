@@ -30,7 +30,14 @@ export const PurchaseView: React.FC = () => {
 
   // Print Configuration States
   const [printDocType, setPrintDocType] = useState<'surat_jalan' | 'tanda_terima'>('surat_jalan');
-  const [printPaperSize, setPrintPaperSize] = useState<'a4' | 'thermal'>('a4');
+  const [printPaperSize, setPrintPaperSize] = useState<'a4' | 'thermal_80' | 'thermal_58'>('a4');
+  
+  // Custom print display options
+  const [printCustomTitle, setPrintCustomTitle] = useState('');
+  const [printShowPrices, setPrintShowPrices] = useState(false);
+  const [printShowNotes, setPrintShowNotes] = useState(true);
+  const [printShowSignatures, setPrintShowSignatures] = useState(true);
+  const [printShowTax, setPrintShowTax] = useState(true);
 
   // Create PO Form State
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
@@ -251,6 +258,7 @@ export const PurchaseView: React.FC = () => {
 
   const viewPODetails = (po: any) => {
     setSelectedPO(po);
+    setPrintCustomTitle(''); // Reset custom title
     setShowDetailModal(true);
   };
 
@@ -692,8 +700,8 @@ export const PurchaseView: React.FC = () => {
 
       {/* ==================== MODAL: DETAIL PO ==================== */}
       {showDetailModal && selectedPO && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h5 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
                 <FileText className="w-5 h-5 text-blue-600" />
@@ -757,13 +765,14 @@ export const PurchaseView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Opsi Cetak Surat Pembelian */}
+              {/* Opsi Cetak Surat Pembelian (Kustomisasi) */}
               <div className="border-t border-slate-100 pt-4 space-y-3">
                 <span className="block font-black text-slate-800 text-[11px] flex items-center gap-1">
                   <Printer className="w-3.5 h-3.5 text-blue-600" />
-                  Cetak Surat Pembelian
+                  Kustomisasi Cetak Surat / Tanda Terima
                 </span>
-                <div className="grid grid-cols-2 gap-3">
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className="block font-bold text-gray-500 mb-1">Jenis Dokumen:</label>
                     <select
@@ -783,9 +792,60 @@ export const PurchaseView: React.FC = () => {
                       className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl font-bold cursor-pointer focus:outline-none"
                     >
                       <option value="a4">Kertas A4 / PDF</option>
-                      <option value="thermal">Kertas Struk (80mm)</option>
+                      <option value="thermal_80">Kertas Struk (80mm)</option>
+                      <option value="thermal_58">Kertas Struk (58mm)</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block font-bold text-gray-500 mb-1">Judul Kustom (Opsional):</label>
+                    <input
+                      type="text"
+                      value={printCustomTitle}
+                      onChange={(e) => setPrintCustomTitle(e.target.value)}
+                      placeholder="Masukkan judul khusus..."
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl font-medium focus:outline-none focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Checkboxes layout settings */}
+                <div className="bg-slate-50 p-3 rounded-2xl grid grid-cols-2 md:grid-cols-4 gap-2 font-bold text-slate-600 text-[10px]">
+                  {printDocType === 'surat_jalan' && (
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={printShowPrices}
+                        onChange={(e) => setPrintShowPrices(e.target.checked)}
+                      />
+                      <span>Tampilkan Harga</span>
+                    </label>
+                  )}
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={printShowNotes}
+                      onChange={(e) => setPrintShowNotes(e.target.checked)}
+                    />
+                    <span>Tampilkan Catatan</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={printShowSignatures}
+                      onChange={(e) => setPrintShowSignatures(e.target.checked)}
+                    />
+                    <span>Kolom Ttd</span>
+                  </label>
+                  {printDocType === 'tanda_terima' && (
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={printShowTax}
+                        onChange={(e) => setPrintShowTax(e.target.checked)}
+                      />
+                      <span>Tampilkan Pajak</span>
+                    </label>
+                  )}
                 </div>
 
                 <div className="pt-2 flex justify-between items-center gap-2">
@@ -796,7 +856,7 @@ export const PurchaseView: React.FC = () => {
                         window.print();
                       }, 150);
                     }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     Cetak Dokumen
@@ -1021,11 +1081,27 @@ export const PurchaseView: React.FC = () => {
 
       {/* ==================== HIDDEN PRINT AREA (RENDER DOKUMEN CETAK) ==================== */}
       {selectedPO && (
-        <div id="po-print-area" className="hidden">
+        <div id="po-print-area" className={`size-${printPaperSize}`}>
           {printDocType === 'surat_jalan' ? (
-            <SuratJalanPrintTemplate po={selectedPO} branch={activeBranch} size={printPaperSize} />
+            <SuratJalanPrintTemplate 
+              po={selectedPO} 
+              branch={activeBranch} 
+              size={printPaperSize}
+              customTitle={printCustomTitle}
+              showPrices={printShowPrices}
+              showNotes={printShowNotes}
+              showSignatures={printShowSignatures}
+            />
           ) : (
-            <TandaTeimaPrintTemplate po={selectedPO} branch={activeBranch} size={printPaperSize} />
+            <TandaTeimaPrintTemplate 
+              po={selectedPO} 
+              branch={activeBranch} 
+              size={printPaperSize}
+              customTitle={printCustomTitle}
+              showNotes={printShowNotes}
+              showSignatures={printShowSignatures}
+              showTax={printShowTax}
+            />
           )}
         </div>
       )}
@@ -1038,34 +1114,47 @@ export const PurchaseView: React.FC = () => {
 interface PrintProps {
   po: any;
   branch: any;
-  size: 'a4' | 'thermal';
+  size: 'a4' | 'thermal_80' | 'thermal_58';
+  customTitle: string;
+  showPrices?: boolean;
+  showNotes?: boolean;
+  showSignatures?: boolean;
+  showTax?: boolean;
 }
 
-const SuratJalanPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => {
-  const isThermal = size === 'thermal';
-  const todayStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+const SuratJalanPrintTemplate: React.FC<PrintProps> = ({ 
+  po, 
+  branch, 
+  size, 
+  customTitle,
+  showPrices = false,
+  showNotes = true,
+  showSignatures = true
+}) => {
+  const isThermal = size === 'thermal_80' || size === 'thermal_58';
+  const widthClass = size === 'thermal_58' ? 'w-[58mm]' : 'w-[80mm]';
+  const title = customTitle.trim() || 'SURAT JALAN / WAYBILL';
 
   if (isThermal) {
     return (
-      <div className="w-[80mm] p-2 text-black font-mono text-[10px] leading-tight bg-white">
-        <div className="text-center font-bold text-xs border-b border-dashed border-black pb-2 mb-2">
-          <span>{branch?.name || 'OUTLET'}</span>
+      <div className={`${widthClass} p-2 text-black font-mono text-[9px] leading-tight bg-white`}>
+        <div className="text-center font-bold border-b border-dashed border-black pb-2 mb-2">
+          <span className="text-xs uppercase">{branch?.name || 'OUTLET RESTO'}</span>
           <br />
-          <span>SURAT JALAN / WAYBILL</span>
+          <span className="text-[10px]">{title}</span>
         </div>
         <div className="space-y-1 mb-2">
           <div>No. PO: <span className="font-bold">{po.po_number}</span></div>
           <div>Tanggal: {new Date(po.created_at || Date.now()).toLocaleDateString('id-ID')}</div>
           <div>Supplier: {po.supplier_name}</div>
-          <div>Alamat Cabang: {branch?.address || '-'}</div>
         </div>
         
-        <table className="w-full border-t border-b border-dashed border-black my-2">
+        <table className="w-full border-t border-b border-dashed border-black my-2 text-[9px]">
           <thead>
             <tr className="font-bold text-left">
               <th className="py-1">Nama Item</th>
               <th className="py-1 text-center">Pesan</th>
-              <th className="py-1 text-center">Terima</th>
+              {showPrices && <th className="py-1 text-right">Harga</th>}
             </tr>
           </thead>
           <tbody>
@@ -1073,26 +1162,28 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
               <tr key={it.id} className="border-b border-dotted border-gray-300">
                 <td className="py-1 font-bold">{it.item_name}</td>
                 <td className="py-1 text-center">{it.quantity_ordered} {it.unit}</td>
-                <td className="py-1 text-center">{it.quantity_received || '-'} {it.unit}</td>
+                {showPrices && <td className="py-1 text-right">Rp {it.unit_price?.toLocaleString('id-ID')}</td>}
               </tr>
             ))}
           </tbody>
         </table>
 
-        {po.notes && <div className="my-2 italic">Catatan: {po.notes}</div>}
+        {showNotes && po.notes && <div className="my-2 italic">Catatan: {po.notes}</div>}
 
-        <div className="grid grid-cols-2 text-center mt-6 pt-2 border-t border-dashed border-black">
-          <div>
-            <span>Pengirim</span>
-            <div className="h-12"></div>
-            <span>( ................... )</span>
+        {showSignatures && (
+          <div className="grid grid-cols-2 text-center mt-6 pt-2 border-t border-dashed border-black">
+            <div>
+              <span>Pengirim</span>
+              <div className="h-10"></div>
+              <span>( ............ )</span>
+            </div>
+            <div>
+              <span>Penerima</span>
+              <div className="h-10"></div>
+              <span>( ............ )</span>
+            </div>
           </div>
-          <div>
-            <span>Penerima</span>
-            <div className="h-12"></div>
-            <span>( ................... )</span>
-          </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -1102,7 +1193,7 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
     <div className="w-[210mm] p-10 text-slate-800 font-sans text-xs bg-white min-h-screen">
       <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-5">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">SURAT JALAN / WAYBILL</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">{title}</h1>
           <span className="text-slate-500 font-bold block mt-1">Nusantara POS Enterprise System</span>
         </div>
         <div className="text-right">
@@ -1132,7 +1223,8 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
             <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-300">
               <th className="p-3 border-r border-slate-300">Nama Bahan Baku</th>
               <th className="p-3 text-center border-r border-slate-300">Kuantitas Dipesan</th>
-              <th className="p-3 text-center border-r border-slate-300">Kuantitas Diterima</th>
+              {showPrices && <th className="p-3 text-right border-r border-slate-300">Harga Unit</th>}
+              {showPrices && <th className="p-3 text-right border-r border-slate-300">Subtotal</th>}
               <th className="p-3">Satuan</th>
             </tr>
           </thead>
@@ -1141,7 +1233,8 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
               <tr key={it.id} className="border-b border-slate-300 font-bold text-slate-700">
                 <td className="p-3 border-r border-slate-300">{it.item_name}</td>
                 <td className="p-3 text-center border-r border-slate-300">{it.quantity_ordered}</td>
-                <td className="p-3 text-center border-r border-slate-300">{it.quantity_received || '-'}</td>
+                {showPrices && <td className="p-3 text-right border-r border-slate-300">Rp {it.unit_price?.toLocaleString('id-ID')}</td>}
+                {showPrices && <td className="p-3 text-right border-r border-slate-300">Rp {(it.quantity_ordered * it.unit_price)?.toLocaleString('id-ID')}</td>}
                 <td className="p-3">{it.unit}</td>
               </tr>
             ))}
@@ -1149,44 +1242,56 @@ const SuratJalanPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
         </table>
       </div>
 
-      {po.notes && (
+      {showNotes && po.notes && (
         <div className="mb-8 p-3 bg-slate-50 border border-slate-200 rounded-xl">
           <span className="block text-[10px] font-bold text-gray-400 mb-0.5">CATATAN / KETERANGAN:</span>
           <p className="text-slate-700 font-bold">{po.notes}</p>
         </div>
       )}
 
-      <div className="mt-16 flex justify-around text-center font-bold">
-        <div className="w-48">
-          <span>Hormat Kami,</span>
-          <br />
-          <span>Pengirim (Supplier)</span>
-          <div className="h-20"></div>
-          <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+      {showSignatures && (
+        <div className="mt-16 flex justify-around text-center font-bold">
+          <div className="w-48">
+            <span>Hormat Kami,</span>
+            <br />
+            <span>Pengirim (Supplier)</span>
+            <div className="h-20"></div>
+            <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+          </div>
+          <div className="w-48">
+            <span>Diterima Oleh,</span>
+            <br />
+            <span>Staf Restoran</span>
+            <div className="h-20"></div>
+            <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+          </div>
         </div>
-        <div className="w-48">
-          <span>Diterima Oleh,</span>
-          <br />
-          <span>Staf Restoran</span>
-          <div className="h-20"></div>
-          <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
 
 // ==================== TEMPLATE CETAK: TANDA TERIMA ====================
-const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => {
-  const isThermal = size === 'thermal';
+const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({ 
+  po, 
+  branch, 
+  size, 
+  customTitle,
+  showNotes = true,
+  showSignatures = true,
+  showTax = true
+}) => {
+  const isThermal = size === 'thermal_80' || size === 'thermal_58';
+  const widthClass = size === 'thermal_58' ? 'w-[58mm]' : 'w-[80mm]';
+  const title = customTitle.trim() || 'TANDA TERIMA PEMBELIAN';
 
   if (isThermal) {
     return (
-      <div className="w-[80mm] p-2 text-black font-mono text-[10px] leading-tight bg-white">
-        <div className="text-center font-bold text-xs border-b border-dashed border-black pb-2 mb-2">
-          <span>{branch?.name || 'OUTLET'}</span>
+      <div className={`${widthClass} p-2 text-black font-mono text-[9px] leading-tight bg-white`}>
+        <div className="text-center font-bold border-b border-dashed border-black pb-2 mb-2">
+          <span className="text-xs uppercase">{branch?.name || 'OUTLET'}</span>
           <br />
-          <span>TANDA TERIMA PEMBELIAN</span>
+          <span className="text-[10px]">{title}</span>
         </div>
         <div className="space-y-1 mb-2">
           <div>No. PO: <span className="font-bold">{po.po_number}</span></div>
@@ -1194,7 +1299,7 @@ const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
           <div>Supplier: {po.supplier_name}</div>
         </div>
         
-        <table className="w-full border-t border-b border-dashed border-black my-2">
+        <table className="w-full border-t border-b border-dashed border-black my-2 text-[9px]">
           <thead>
             <tr className="font-bold text-left">
               <th className="py-1">Nama Item</th>
@@ -1215,22 +1320,26 @@ const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
 
         <div className="text-right space-y-1 font-bold my-2 border-b border-dashed border-black pb-2">
           <div>Subtotal: Rp {po.subtotal?.toLocaleString('id-ID')}</div>
-          <div>Pajak (11%): Rp {po.tax_amount?.toLocaleString('id-ID')}</div>
-          <div className="text-xs">TOTAL BELANJA: Rp {po.total_amount?.toLocaleString('id-ID')}</div>
+          {showTax && <div>Pajak (11%): Rp {po.tax_amount?.toLocaleString('id-ID')}</div>}
+          <div className="text-[10px]">TOTAL: Rp {(showTax ? po.total_amount : po.subtotal)?.toLocaleString('id-ID')}</div>
         </div>
 
-        <div className="grid grid-cols-2 text-center mt-6 pt-2">
-          <div>
-            <span>Supplier</span>
-            <div className="h-12"></div>
-            <span>( ................... )</span>
+        {showNotes && po.notes && <div className="my-2 italic">Catatan: {po.notes}</div>}
+
+        {showSignatures && (
+          <div className="grid grid-cols-2 text-center mt-6 pt-2">
+            <div>
+              <span>Supplier</span>
+              <div className="h-10"></div>
+              <span>( ............ )</span>
+            </div>
+            <div>
+              <span>Penerima</span>
+              <div className="h-10"></div>
+              <span>( ............ )</span>
+            </div>
           </div>
-          <div>
-            <span>Penerima</span>
-            <div className="h-12"></div>
-            <span>( ................... )</span>
-          </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -1240,7 +1349,7 @@ const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
     <div className="w-[210mm] p-10 text-slate-800 font-sans text-xs bg-white min-h-screen">
       <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-5">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">TANDA TERIMA PEMBELIAN</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">{title}</h1>
           <span className="text-slate-500 font-bold block mt-1">Bukti Penerimaan Barang & Tagihan PO</span>
         </div>
         <div className="text-right">
@@ -1291,28 +1400,39 @@ const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => 
           <span>Subtotal:</span>
           <span>Rp {po.subtotal?.toLocaleString('id-ID')}</span>
         </div>
-        <div className="flex justify-between w-64 text-[11px] text-slate-500">
-          <span>Pajak (11%):</span>
-          <span>Rp {po.tax_amount?.toLocaleString('id-ID')}</span>
-        </div>
+        {showTax && (
+          <div className="flex justify-between w-64 text-[11px] text-slate-500">
+            <span>Pajak (11%):</span>
+            <span>Rp {po.tax_amount?.toLocaleString('id-ID')}</span>
+          </div>
+        )}
         <div className="flex justify-between w-64 text-sm text-slate-950 font-black pt-1 border-t border-slate-100">
           <span>Grand Total:</span>
-          <span>Rp {po.total_amount?.toLocaleString('id-ID')}</span>
+          <span>Rp {(showTax ? po.total_amount : po.subtotal)?.toLocaleString('id-ID')}</span>
         </div>
       </div>
 
-      <div className="mt-16 flex justify-around text-center font-bold">
-        <div className="w-48">
-          <span>Supplier,</span>
-          <div className="h-20"></div>
-          <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+      {showNotes && po.notes && (
+        <div className="mb-8 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+          <span className="block text-[10px] font-bold text-gray-400 mb-0.5">CATATAN / KETERANGAN:</span>
+          <p className="text-slate-700 font-bold">{po.notes}</p>
         </div>
-        <div className="w-48">
-          <span>Penerima (Kasir/Staff),</span>
-          <div className="h-20"></div>
-          <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+      )}
+
+      {showSignatures && (
+        <div className="mt-16 flex justify-around text-center font-bold">
+          <div className="w-48">
+            <span>Supplier,</span>
+            <div className="h-20"></div>
+            <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+          </div>
+          <div className="w-48">
+            <span>Penerima (Kasir/Staff),</span>
+            <div className="h-20"></div>
+            <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
