@@ -120,6 +120,26 @@ productsRouter.get('/unit-conversions', (req, res) => {
   res.json(db.get('unit_conversions'));
 });
 
+// Get Recipe by Product ID
+productsRouter.get('/recipe/:id', (req, res) => {
+  const productId = req.params.id;
+  const recipes = db.get('product_recipes').filter((r: any) => r.product_id === productId);
+  const ingredients = db.get('ingredients');
+
+  const enriched = recipes.map((r: any) => {
+    const ing = ingredients.find((i: any) => i.id === r.ingredient_id);
+    return {
+      ...r,
+      ingredient_name: ing ? ing.name : 'Unknown Ingredient',
+      ingredient_unit: ing ? ing.base_unit : 'unit',
+      cost_per_unit: ing ? ing.cost_per_unit : 0,
+      quantity_required: r.quantity,
+    };
+  });
+
+  res.json({ recipe: enriched });
+});
+
 // Create product with optional variants & BOM recipes
 productsRouter.post('/', (req, res) => {
   const { name, code, category_id, description, image_url, base_price, is_recipe_based, has_variants, track_stock, variants, recipes } = req.body;

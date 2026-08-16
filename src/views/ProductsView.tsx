@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
@@ -15,7 +15,10 @@ import {
   Trash2, 
   X,
   FileText,
-  Percent
+  Percent,
+  Upload,
+  Link,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export const ProductsView: React.FC = () => {
@@ -32,6 +35,12 @@ export const ProductsView: React.FC = () => {
   // Modals
   const [showProductModal, setShowProductModal] = useState(false);
   const [showEditProductModal, setShowEditProductModal] = useState(false);
+
+  // Image mode states
+  const [createImageMode, setCreateImageMode] = useState<'url' | 'upload'>('upload');
+  const [editImageMode, setEditImageMode] = useState<'url' | 'upload'>('upload');
+  const fileInputRefCreate = useRef<HTMLInputElement>(null);
+  const fileInputRefEdit = useRef<HTMLInputElement>(null);
 
   // Product Form State (Create)
   const [prodName, setProdName] = useState('');
@@ -58,6 +67,40 @@ export const ProductsView: React.FC = () => {
   const [editProdTrackStock, setEditProdTrackStock] = useState(true);
   const [editProdRecipeLines, setEditProdRecipeLines] = useState<any[]>([]);
 
+  const handleSelectProduct = async (product: any) => {
+    setSelectedProduct(product);
+    setLoadingRecipe(true);
+
+    // If product has recipes attached directly from GET /products
+    if (product.recipes && Array.isArray(product.recipes) && product.recipes.length > 0) {
+      const mapped = product.recipes.map((r: any) => ({
+        ...r,
+        quantity_required: r.quantity_required !== undefined ? r.quantity_required : r.quantity,
+        ingredient_unit: r.ingredient_unit || r.unit || 'unit',
+        cost_per_unit: r.cost_per_unit || 0,
+      }));
+      setRecipe(mapped);
+      setLoadingRecipe(false);
+    } else {
+      // Fallback fetch
+      try {
+        const res = await api.get(`/products/recipe/${product.id}`);
+        const list = res.recipe || [];
+        setRecipe(list.map((r: any) => ({
+          ...r,
+          quantity_required: r.quantity_required !== undefined ? r.quantity_required : r.quantity,
+          ingredient_unit: r.ingredient_unit || r.unit || 'unit',
+          cost_per_unit: r.cost_per_unit || 0,
+        })));
+      } catch (e) {
+        console.error('Failed to load recipe:', e);
+        setRecipe([]);
+      } finally {
+        setLoadingRecipe(false);
+      }
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -70,17 +113,15 @@ export const ProductsView: React.FC = () => {
       setCategories(cats);
       setIngredients(ings);
       
-      if (cats.length > 0) {
+      if (cats.length > 0 && !prodCategoryId) {
         setProdCategoryId(cats[0].id);
       }
 
       if (prods.length > 0) {
-        // Auto select first if nothing selected
         if (!selectedProduct) {
           handleSelectProduct(prods[0]);
         } else {
-          // Keep current selected product details updated
-          const updated = prods.find((p) => p.id === selectedProduct.id);
+          const updated = prods.find((p: any) => p.id === selectedProduct.id);
           if (updated) {
             handleSelectProduct(updated);
           } else {
@@ -96,23 +137,32 @@ export const ProductsView: React.FC = () => {
     }
   };
 
-  const handleSelectProduct = async (product: any) => {
-    setSelectedProduct(product);
-    setLoadingRecipe(true);
-    try {
-      const res = await api.get(`/products/recipe/${product.id}`);
-      setRecipe(res.recipe || []);
-    } catch (e) {
-      console.error(e);
-      setRecipe([]);
-    } finally {
-      setLoadingRecipe(false);
-    }
-  };
-
   useEffect(() => {
     loadData();
   }, [activeBranchId]);
+
+  // Image Upload Handlers
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Ukuran gambar maksimal 2MB', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      if (isEdit) {
+        setEditProdImageUrl(base64);
+      } else {
+        setProdImageUrl(base64);
+      }
+      showToast('Gambar berhasil dimuat!', 'success');
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Add/Remove Recipe Lines (Create Form)
   const handleAddRecipeLine = () => {
@@ -163,7 +213,7 @@ export const ProductsView: React.FC = () => {
       await api.post('/products', {
         name: prodName.trim(),
         code: prodCode.trim() || undefined,
-        category_id: prodCategoryId,
+        category_id: prodCategoryId || (categories[0]?.id),
         description: prodDescription.trim(),
         image_url: prodImageUrl.trim() || undefined,
         base_price: Number(prodPrice),
@@ -192,18 +242,25 @@ export const ProductsView: React.FC = () => {
   const openEditProduct = (p: any) => {
     setEditProdId(p.id);
     setEditProdName(p.name || '');
-    setEditProdCode(p.code || '');
-    setEditProdCategoryId(p.category_id || '');
+    setEditProdCode(p.code || p.sku || '');
+    setEditProdCategoryId(p.category_id || (categories[0]?.id));
     setEditProdDescription(p.description || '');
     setEditProdImageUrl(p.image_url || '');
     setEditProdPrice(String(p.base_price || 0));
     setEditProdIsRecipeBased(p.is_recipe_based !== undefined ? p.is_recipe_based : true);
     setEditProdTrackStock(p.track_stock !== undefined ? p.track_stock : true);
 
+    // If image is a data url, set mode to upload, otherwise url
+    if (p.image_url?.startsWith('data:')) {
+      setEditImageMode('upload');
+    } else {
+      setEditImageMode('url');
+    }
+
     // Format recipes from selected product
     const currentRecipes = (p.recipes || []).map((r: any) => ({
       ingredient_id: r.ingredient_id,
-      quantity: r.quantity || r.quantity_required,
+      quantity: r.quantity !== undefined ? r.quantity : (r.quantity_required || 1),
     }));
     setEditProdRecipeLines(currentRecipes.length > 0 ? currentRecipes : [{ ingredient_id: '', quantity: 1 }]);
     setShowEditProductModal(true);
@@ -242,7 +299,7 @@ export const ProductsView: React.FC = () => {
 
   // Soft Delete Product
   const handleDeleteProduct = async (p: any, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent select trigger
+    e.stopPropagation();
     if (!window.confirm(`Apakah Anda yakin ingin menghapus menu "${p.name}"? Ini menggunakan soft delete.`)) return;
     try {
       await api.delete(`/products/${p.id}`);
@@ -265,7 +322,10 @@ export const ProductsView: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowProductModal(true)}
+            onClick={() => {
+              setCreateImageMode('upload');
+              setShowProductModal(true);
+            }}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -309,7 +369,7 @@ export const ProductsView: React.FC = () => {
                   >
                     <div className="flex items-center space-x-3.5">
                       <img
-                        src={p.image_url}
+                        src={p.image_url || 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=500&auto=format&fit=crop&q=60'}
                         alt={p.name}
                         className="w-14 h-14 rounded-2xl object-cover border border-gray-100 shrink-0 shadow-2xs"
                         referrerPolicy="no-referrer"
@@ -323,7 +383,7 @@ export const ProductsView: React.FC = () => {
                           </span>
                           {p.is_recipe_based ? (
                             <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 uppercase">
-                              Resep BOM
+                              Resep BOM ({p.recipes?.length || 0})
                             </span>
                           ) : (
                             <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 uppercase">
@@ -350,7 +410,10 @@ export const ProductsView: React.FC = () => {
                       {/* Action buttons */}
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => openEditProduct(p)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditProduct(p);
+                          }}
                           className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                           title="Edit Menu"
                         >
@@ -392,7 +455,11 @@ export const ProductsView: React.FC = () => {
               {loadingRecipe ? (
                 <div className="py-8 text-center text-xs text-gray-400">Memuat rincian resep...</div>
               ) : recipe.length === 0 ? (
-                <div className="py-8 text-center text-xs text-gray-400">Menu ini belum memiliki resep BOM tersimpan.</div>
+                <div className="py-8 text-center text-xs text-gray-400">
+                  {selectedProduct.is_recipe_based
+                    ? 'Menu ini belum memiliki resep BOM tersimpan. Klik Edit untuk menambah bahan.'
+                    : 'Menu ini diatur sebagai produk retail langsung (bukan berbasis resep racikan).'}
+                </div>
               ) : (
                 <div className="space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar pr-1">
                   {recipe.map((r, idx) => (
@@ -403,11 +470,11 @@ export const ProductsView: React.FC = () => {
                       <div>
                         <span className="font-bold text-xs text-slate-800">{r.ingredient_name}</span>
                         <span className="block text-[10px] text-gray-400 font-mono">
-                          HPP: Rp {(r.quantity_required * r.cost_per_unit).toLocaleString('id-ID')}
+                          HPP: Rp {((r.quantity_required || r.quantity || 0) * (r.cost_per_unit || 0)).toLocaleString('id-ID')}
                         </span>
                       </div>
                       <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-black text-xs font-mono">
-                        {r.quantity_required} {r.ingredient_unit || r.unit}
+                        {r.quantity_required || r.quantity} {r.ingredient_unit || r.unit || 'unit'}
                       </span>
                     </div>
                   ))}
@@ -491,27 +558,95 @@ export const ProductsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-700 mb-1">URL Gambar (Foto Menu):</label>
-                  <input
-                    type="text"
-                    value={prodImageUrl}
-                    onChange={(e) => setProdImageUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-gray-900 focus:outline-none transition-colors"
-                  />
+              {/* Gambar Menu: Upload File vs Input URL */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-gray-800 font-bold text-xs">Foto / Gambar Menu:</label>
+                  <div className="flex items-center bg-white border border-gray-200 rounded-xl p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setCreateImageMode('upload')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        createImageMode === 'upload' ? 'bg-blue-600 text-white shadow-2xs' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      <Upload className="w-3 h-3" />
+                      Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCreateImageMode('url')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        createImageMode === 'url' ? 'bg-blue-600 text-white shadow-2xs' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      <Link className="w-3 h-3" />
+                      Input URL
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-gray-700 mb-1">Deskripsi Singkat:</label>
-                  <input
-                    type="text"
-                    value={prodDescription}
-                    onChange={(e) => setProdDescription(e.target.value)}
-                    placeholder="Deskripsi cita rasa / penyajian"
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-gray-900 focus:outline-none transition-colors"
-                  />
+
+                <div className="flex items-center gap-3">
+                  {prodImageUrl ? (
+                    <div className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-blue-500 shrink-0 shadow-2xs">
+                      <img src={prodImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setProdImageUrl('')}
+                        className="absolute top-0 right-0 bg-red-600 text-white p-0.5 rounded-bl-lg hover:bg-red-700 cursor-pointer"
+                        title="Hapus Gambar"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-2xl bg-white border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 shrink-0">
+                      <ImageIcon className="w-6 h-6" />
+                    </div>
+                  )}
+
+                  <div className="flex-1">
+                    {createImageMode === 'upload' ? (
+                      <div>
+                        <input
+                          ref={fileInputRefCreate}
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleFileUpload(e, false)}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRefCreate.current?.click()}
+                          className="px-4 py-2 bg-white border border-gray-200 hover:border-blue-500 hover:text-blue-600 rounded-xl text-xs font-bold text-gray-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          Pilih Foto dari Komputer / HP
+                        </button>
+                        <p className="text-[10px] text-gray-400 mt-1 font-normal">Mendukung JPG, PNG, WebP (Maks. 2MB)</p>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={prodImageUrl}
+                        onChange={(e) => setProdImageUrl(e.target.value)}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full p-2.5 bg-white border border-gray-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-gray-900 focus:outline-none transition-colors"
+                      />
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 mb-1">Deskripsi Singkat:</label>
+                <input
+                  type="text"
+                  value={prodDescription}
+                  onChange={(e) => setProdDescription(e.target.value)}
+                  placeholder="Deskripsi cita rasa / penyajian"
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-gray-900 focus:outline-none transition-colors"
+                />
               </div>
 
               {/* Toggles */}
@@ -685,25 +820,94 @@ export const ProductsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-700 mb-1">URL Gambar:</label>
-                  <input
-                    type="text"
-                    value={editProdImageUrl}
-                    onChange={(e) => setEditProdImageUrl(e.target.value)}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-gray-900 focus:outline-none"
-                  />
+              {/* Gambar Menu: Upload File vs Input URL */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-gray-800 font-bold text-xs">Foto / Gambar Menu:</label>
+                  <div className="flex items-center bg-white border border-gray-200 rounded-xl p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditImageMode('upload')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        editImageMode === 'upload' ? 'bg-blue-600 text-white shadow-2xs' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      <Upload className="w-3 h-3" />
+                      Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditImageMode('url')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        editImageMode === 'url' ? 'bg-blue-600 text-white shadow-2xs' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      <Link className="w-3 h-3" />
+                      Input URL
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-gray-700 mb-1">Deskripsi Singkat:</label>
-                  <input
-                    type="text"
-                    value={editProdDescription}
-                    onChange={(e) => setEditProdDescription(e.target.value)}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-gray-900 focus:outline-none"
-                  />
+
+                <div className="flex items-center gap-3">
+                  {editProdImageUrl ? (
+                    <div className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-blue-500 shrink-0 shadow-2xs">
+                      <img src={editProdImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setEditProdImageUrl('')}
+                        className="absolute top-0 right-0 bg-red-600 text-white p-0.5 rounded-bl-lg hover:bg-red-700 cursor-pointer"
+                        title="Hapus Gambar"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-2xl bg-white border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 shrink-0">
+                      <ImageIcon className="w-6 h-6" />
+                    </div>
+                  )}
+
+                  <div className="flex-1">
+                    {editImageMode === 'upload' ? (
+                      <div>
+                        <input
+                          ref={fileInputRefEdit}
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleFileUpload(e, true)}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRefEdit.current?.click()}
+                          className="px-4 py-2 bg-white border border-gray-200 hover:border-blue-500 hover:text-blue-600 rounded-xl text-xs font-bold text-gray-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          Ganti Foto dari Komputer / HP
+                        </button>
+                        <p className="text-[10px] text-gray-400 mt-1 font-normal">Mendukung JPG, PNG, WebP (Maks. 2MB)</p>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={editProdImageUrl}
+                        onChange={(e) => setEditProdImageUrl(e.target.value)}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full p-2.5 bg-white border border-gray-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-gray-900 focus:outline-none transition-colors"
+                      />
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 mb-1">Deskripsi Singkat:</label>
+                <input
+                  type="text"
+                  value={editProdDescription}
+                  onChange={(e) => setEditProdDescription(e.target.value)}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-gray-900 focus:outline-none"
+                />
               </div>
 
               <div className="flex items-center gap-6 border-y border-slate-100 py-3.5 font-bold text-slate-700">
