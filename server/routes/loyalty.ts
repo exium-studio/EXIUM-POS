@@ -66,3 +66,27 @@ loyaltyRouter.post('/promotions', (req, res) => {
   db.insert('promotions', newPromo);
   res.json(newPromo);
 });
+
+// Get Loyalty Configuration
+loyaltyRouter.get('/config', (req, res) => {
+  const config = db.get('loyalty_config') || {
+    points_multiplier_idr: 10000,
+    tier_silver_min: 1000000,
+    tier_gold_min: 5000000,
+    tier_platinum_min: 10000000,
+  };
+  res.json(config);
+});
+
+// Update Loyalty Configuration
+loyaltyRouter.put('/config', (req, res) => {
+  const { points_multiplier_idr, tier_silver_min, tier_gold_min, tier_platinum_min } = req.body;
+  const updatedConfig = {
+    points_multiplier_idr: Number(points_multiplier_idr) || 10000,
+    tier_silver_min: Number(tier_silver_min) || 1000000,
+    tier_gold_min: Number(tier_gold_min) || 5000000,
+    tier_platinum_min: Number(tier_platinum_min) || 10000000,
+  };
+  db.set('loyalty_config', updatedConfig);
+  res.json(updatedConfig);
+});

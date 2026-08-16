@@ -48,6 +48,7 @@ export interface InMemoryDB {
   chart_of_accounts: any[];
   journal_entries: any[];
   audit_logs: any[];
+  loyalty_config?: any;
 }
 
 const initialSeedData: InMemoryDB = {
@@ -598,6 +599,12 @@ const initialSeedData: InMemoryDB = {
   ],
   journal_entries: [],
   audit_logs: [],
+  loyalty_config: {
+    points_multiplier_idr: 10000,
+    tier_silver_min: 1000000,
+    tier_gold_min: 5000000,
+    tier_platinum_min: 10000000,
+  },
 };
 
 class DBStore {
@@ -716,6 +723,16 @@ class DBStore {
       ownerUser.password_hash = '123456';
       databaseModified = true;
       console.log('Owner password successfully reset to 123456');
+    }
+
+    if (!this.data.loyalty_config) {
+      this.data.loyalty_config = {
+        points_multiplier_idr: 10000,
+        tier_silver_min: 1000000,
+        tier_gold_min: 5000000,
+        tier_platinum_min: 10000000,
+      };
+      databaseModified = true;
     }
 
     if (databaseModified) {
