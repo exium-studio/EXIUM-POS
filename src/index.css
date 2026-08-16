@@ -34,6 +34,11 @@ html, body, #root {
   scrollbar-color: #334155 transparent;
 }
 
+/* Hide PO print area on normal screen display */
+#po-print-area {
+  display: none !important;
+}
+
 /* @media print styles to print ONLY the receipt, hiding all dashboard layout elements */
 @media print {
   body {
@@ -54,9 +59,20 @@ html, body, #root {
 
   /* Make sure our receipt and only our receipt is visible */
   #thermal-receipt, 
-  #thermal-receipt * {
+  #thermal-receipt *,
+  #po-print-area,
+  #po-print-area * {
     visibility: visible;
     display: block !important;
+  }
+
+  #po-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white;
+    color: black;
   }
 
   #thermal-receipt {

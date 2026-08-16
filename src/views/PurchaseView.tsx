@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
-import { ShoppingCart, Plus, CheckCircle2, Clock, Truck, RefreshCw, Trash2, Calendar, X, Eye, FileText, Edit2, Users, BarChart3 } from 'lucide-react';
+import { ShoppingCart, Plus, CheckCircle2, Clock, Truck, RefreshCw, Trash2, Calendar, X, Eye, FileText, Edit2, Users, BarChart3, Printer } from 'lucide-react';
 
 export const PurchaseView: React.FC = () => {
-  const { activeBranchId, user } = useAuth();
+  const { activeBranchId, user, activeBranch } = useAuth();
   const { showToast } = useToast();
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -27,6 +27,10 @@ export const PurchaseView: React.FC = () => {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showEditSupplierModal, setShowEditSupplierModal] = useState(false);
   const [selectedPO, setSelectedPO] = useState<any>(null);
+
+  // Print Configuration States
+  const [printDocType, setPrintDocType] = useState<'surat_jalan' | 'tanda_terima'>('surat_jalan');
+  const [printPaperSize, setPrintPaperSize] = useState<'a4' | 'thermal'>('a4');
 
   // Create PO Form State
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
@@ -251,7 +255,7 @@ export const PurchaseView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 bg-[#F8FAFC] overflow-y-auto p-4 sm:p-6 space-y-6">
+    <div className="flex-grow bg-[#F8FAFC] overflow-y-auto p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
@@ -292,7 +296,7 @@ export const PurchaseView: React.FC = () => {
       <div className="bg-slate-100 p-1 rounded-2xl flex items-center gap-1 self-start max-w-sm">
         <button
           onClick={() => setActiveSubTab('po_list')}
-          className={`flex-1 py-1.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex-grow py-1.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeSubTab === 'po_list' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -300,7 +304,7 @@ export const PurchaseView: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('suppliers')}
-          className={`flex-1 py-1.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex-grow py-1.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeSubTab === 'suppliers' ? 'bg-white text-purple-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -753,14 +757,59 @@ export const PurchaseView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-4 flex justify-end">
-                <button
-                  onClick={() => setShowDetailModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
-                >
-                  Tutup
-                </button>
+              {/* Opsi Cetak Surat Pembelian */}
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <span className="block font-black text-slate-800 text-[11px] flex items-center gap-1">
+                  <Printer className="w-3.5 h-3.5 text-blue-600" />
+                  Cetak Surat Pembelian
+                </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-gray-500 mb-1">Jenis Dokumen:</label>
+                    <select
+                      value={printDocType}
+                      onChange={(e) => setPrintDocType(e.target.value as any)}
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl font-bold cursor-pointer focus:outline-none"
+                    >
+                      <option value="surat_jalan">Surat Jalan (Waybill)</option>
+                      <option value="tanda_terima">Tanda Terima (Ack Receipt)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-500 mb-1">Kertas Cetak:</label>
+                    <select
+                      value={printPaperSize}
+                      onChange={(e) => setPrintPaperSize(e.target.value as any)}
+                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl font-bold cursor-pointer focus:outline-none"
+                    >
+                      <option value="a4">Kertas A4 / PDF</option>
+                      <option value="thermal">Kertas Struk (80mm)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-between items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeout(() => {
+                        window.print();
+                      }, 150);
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Cetak Dokumen
+                  </button>
+                  <button
+                    onClick={() => setShowDetailModal(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+                </div>
               </div>
+
             </div>
           </div>
         </div>
@@ -970,6 +1019,300 @@ export const PurchaseView: React.FC = () => {
         </div>
       )}
 
+      {/* ==================== HIDDEN PRINT AREA (RENDER DOKUMEN CETAK) ==================== */}
+      {selectedPO && (
+        <div id="po-print-area" className="hidden">
+          {printDocType === 'surat_jalan' ? (
+            <SuratJalanPrintTemplate po={selectedPO} branch={activeBranch} size={printPaperSize} />
+          ) : (
+            <TandaTeimaPrintTemplate po={selectedPO} branch={activeBranch} size={printPaperSize} />
+          )}
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+// ==================== TEMPLATE CETAK: SURAT JALAN ====================
+interface PrintProps {
+  po: any;
+  branch: any;
+  size: 'a4' | 'thermal';
+}
+
+const SuratJalanPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => {
+  const isThermal = size === 'thermal';
+  const todayStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  if (isThermal) {
+    return (
+      <div className="w-[80mm] p-2 text-black font-mono text-[10px] leading-tight bg-white">
+        <div className="text-center font-bold text-xs border-b border-dashed border-black pb-2 mb-2">
+          <span>{branch?.name || 'OUTLET'}</span>
+          <br />
+          <span>SURAT JALAN / WAYBILL</span>
+        </div>
+        <div className="space-y-1 mb-2">
+          <div>No. PO: <span className="font-bold">{po.po_number}</span></div>
+          <div>Tanggal: {new Date(po.created_at || Date.now()).toLocaleDateString('id-ID')}</div>
+          <div>Supplier: {po.supplier_name}</div>
+          <div>Alamat Cabang: {branch?.address || '-'}</div>
+        </div>
+        
+        <table className="w-full border-t border-b border-dashed border-black my-2">
+          <thead>
+            <tr className="font-bold text-left">
+              <th className="py-1">Nama Item</th>
+              <th className="py-1 text-center">Pesan</th>
+              <th className="py-1 text-center">Terima</th>
+            </tr>
+          </thead>
+          <tbody>
+            {po.items?.map((it: any) => (
+              <tr key={it.id} className="border-b border-dotted border-gray-300">
+                <td className="py-1 font-bold">{it.item_name}</td>
+                <td className="py-1 text-center">{it.quantity_ordered} {it.unit}</td>
+                <td className="py-1 text-center">{it.quantity_received || '-'} {it.unit}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {po.notes && <div className="my-2 italic">Catatan: {po.notes}</div>}
+
+        <div className="grid grid-cols-2 text-center mt-6 pt-2 border-t border-dashed border-black">
+          <div>
+            <span>Pengirim</span>
+            <div className="h-12"></div>
+            <span>( ................... )</span>
+          </div>
+          <div>
+            <span>Penerima</span>
+            <div className="h-12"></div>
+            <span>( ................... )</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // A4 Layout
+  return (
+    <div className="w-[210mm] p-10 text-slate-800 font-sans text-xs bg-white min-h-screen">
+      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-5">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">SURAT JALAN / WAYBILL</h1>
+          <span className="text-slate-500 font-bold block mt-1">Nusantara POS Enterprise System</span>
+        </div>
+        <div className="text-right">
+          <span className="text-sm font-black text-blue-600 block">{po.po_number}</span>
+          <span className="text-[10px] text-gray-500 font-bold block mt-1">Tanggal: {new Date(po.created_at || Date.now()).toLocaleDateString('id-ID')}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-8 mb-6">
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
+          <span className="block text-[10px] font-bold text-gray-400 mb-1">PENGIRIM (SUPPLIER)</span>
+          <span className="text-sm font-black text-slate-900 block">{po.supplier_name}</span>
+          <span className="text-slate-600 block mt-1">Jatuh Tempo: {new Date(po.due_date).toLocaleDateString('id-ID')}</span>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
+          <span className="block text-[10px] font-bold text-gray-400 mb-1">PENERIMA (CABANG OUTLET)</span>
+          <span className="text-sm font-black text-slate-900 block">{branch?.name || 'Cabang Resto'}</span>
+          <span className="text-slate-600 block mt-1">{branch?.address || '-'}</span>
+          <span className="text-slate-600 block">Telp: {branch?.phone || '-'}</span>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <span className="block font-black text-slate-900 mb-2">DAFTAR ITEM BARANG</span>
+        <table className="w-full text-left border border-slate-300 border-collapse">
+          <thead>
+            <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-300">
+              <th className="p-3 border-r border-slate-300">Nama Bahan Baku</th>
+              <th className="p-3 text-center border-r border-slate-300">Kuantitas Dipesan</th>
+              <th className="p-3 text-center border-r border-slate-300">Kuantitas Diterima</th>
+              <th className="p-3">Satuan</th>
+            </tr>
+          </thead>
+          <tbody>
+            {po.items?.map((it: any) => (
+              <tr key={it.id} className="border-b border-slate-300 font-bold text-slate-700">
+                <td className="p-3 border-r border-slate-300">{it.item_name}</td>
+                <td className="p-3 text-center border-r border-slate-300">{it.quantity_ordered}</td>
+                <td className="p-3 text-center border-r border-slate-300">{it.quantity_received || '-'}</td>
+                <td className="p-3">{it.unit}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {po.notes && (
+        <div className="mb-8 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+          <span className="block text-[10px] font-bold text-gray-400 mb-0.5">CATATAN / KETERANGAN:</span>
+          <p className="text-slate-700 font-bold">{po.notes}</p>
+        </div>
+      )}
+
+      <div className="mt-16 flex justify-around text-center font-bold">
+        <div className="w-48">
+          <span>Hormat Kami,</span>
+          <br />
+          <span>Pengirim (Supplier)</span>
+          <div className="h-20"></div>
+          <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+        </div>
+        <div className="w-48">
+          <span>Diterima Oleh,</span>
+          <br />
+          <span>Staf Restoran</span>
+          <div className="h-20"></div>
+          <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== TEMPLATE CETAK: TANDA TERIMA ====================
+const TandaTeimaPrintTemplate: React.FC<PrintProps> = ({ po, branch, size }) => {
+  const isThermal = size === 'thermal';
+
+  if (isThermal) {
+    return (
+      <div className="w-[80mm] p-2 text-black font-mono text-[10px] leading-tight bg-white">
+        <div className="text-center font-bold text-xs border-b border-dashed border-black pb-2 mb-2">
+          <span>{branch?.name || 'OUTLET'}</span>
+          <br />
+          <span>TANDA TERIMA PEMBELIAN</span>
+        </div>
+        <div className="space-y-1 mb-2">
+          <div>No. PO: <span className="font-bold">{po.po_number}</span></div>
+          <div>Tanggal: {new Date(po.created_at || Date.now()).toLocaleDateString('id-ID')}</div>
+          <div>Supplier: {po.supplier_name}</div>
+        </div>
+        
+        <table className="w-full border-t border-b border-dashed border-black my-2">
+          <thead>
+            <tr className="font-bold text-left">
+              <th className="py-1">Nama Item</th>
+              <th className="py-1 text-center">Qty</th>
+              <th className="py-1 text-right">Harga</th>
+            </tr>
+          </thead>
+          <tbody>
+            {po.items?.map((it: any) => (
+              <tr key={it.id} className="border-b border-dotted border-gray-300">
+                <td className="py-1 font-bold">{it.item_name}</td>
+                <td className="py-1 text-center">{it.quantity_received || it.quantity_ordered} {it.unit}</td>
+                <td className="py-1 text-right">Rp {it.unit_price?.toLocaleString('id-ID')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="text-right space-y-1 font-bold my-2 border-b border-dashed border-black pb-2">
+          <div>Subtotal: Rp {po.subtotal?.toLocaleString('id-ID')}</div>
+          <div>Pajak (11%): Rp {po.tax_amount?.toLocaleString('id-ID')}</div>
+          <div className="text-xs">TOTAL BELANJA: Rp {po.total_amount?.toLocaleString('id-ID')}</div>
+        </div>
+
+        <div className="grid grid-cols-2 text-center mt-6 pt-2">
+          <div>
+            <span>Supplier</span>
+            <div className="h-12"></div>
+            <span>( ................... )</span>
+          </div>
+          <div>
+            <span>Penerima</span>
+            <div className="h-12"></div>
+            <span>( ................... )</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // A4 Layout
+  return (
+    <div className="w-[210mm] p-10 text-slate-800 font-sans text-xs bg-white min-h-screen">
+      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-5">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">TANDA TERIMA PEMBELIAN</h1>
+          <span className="text-slate-500 font-bold block mt-1">Bukti Penerimaan Barang & Tagihan PO</span>
+        </div>
+        <div className="text-right">
+          <span className="text-sm font-black text-blue-600 block">{po.po_number}</span>
+          <span className="text-[10px] text-gray-500 font-bold block mt-1">Tanggal: {new Date(po.created_at || Date.now()).toLocaleDateString('id-ID')}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-8 mb-6">
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
+          <span className="block text-[10px] font-bold text-gray-400 mb-1">DITERIMA DARI (SUPPLIER)</span>
+          <span className="text-sm font-black text-slate-900 block">{po.supplier_name}</span>
+          <span className="text-slate-600 block mt-1">Jatuh Tempo: {new Date(po.due_date).toLocaleDateString('id-ID')}</span>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
+          <span className="block text-[10px] font-bold text-gray-400 mb-1">DITERIMA OLEH OUTLET</span>
+          <span className="text-sm font-black text-slate-900 block">{branch?.name || 'Cabang Resto'}</span>
+          <span className="text-slate-600 block mt-1">{branch?.address || '-'}</span>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <span className="block font-black text-slate-900 mb-2">RINCIAN HARGA BARANG</span>
+        <table className="w-full text-left border border-slate-300 border-collapse">
+          <thead>
+            <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-300">
+              <th className="p-3 border-r border-slate-300">Nama Bahan</th>
+              <th className="p-3 text-center border-r border-slate-300">Qty Diterima</th>
+              <th className="p-3 text-right border-r border-slate-300">Harga Unit</th>
+              <th className="p-3 text-right">Total Harga</th>
+            </tr>
+          </thead>
+          <tbody>
+            {po.items?.map((it: any) => (
+              <tr key={it.id} className="border-b border-slate-300 font-bold text-slate-700">
+                <td className="p-3 border-r border-slate-300">{it.item_name}</td>
+                <td className="p-3 text-center border-r border-slate-300">{it.quantity_received || it.quantity_ordered} {it.unit}</td>
+                <td className="p-3 text-right border-r border-slate-300">Rp {it.unit_price?.toLocaleString('id-ID')}</td>
+                <td className="p-3 text-right">Rp {((it.quantity_received || it.quantity_ordered) * it.unit_price)?.toLocaleString('id-ID')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex flex-col items-end gap-1.5 font-bold mb-8">
+        <div className="flex justify-between w-64 text-[11px] text-slate-500">
+          <span>Subtotal:</span>
+          <span>Rp {po.subtotal?.toLocaleString('id-ID')}</span>
+        </div>
+        <div className="flex justify-between w-64 text-[11px] text-slate-500">
+          <span>Pajak (11%):</span>
+          <span>Rp {po.tax_amount?.toLocaleString('id-ID')}</span>
+        </div>
+        <div className="flex justify-between w-64 text-sm text-slate-950 font-black pt-1 border-t border-slate-100">
+          <span>Grand Total:</span>
+          <span>Rp {po.total_amount?.toLocaleString('id-ID')}</span>
+        </div>
+      </div>
+
+      <div className="mt-16 flex justify-around text-center font-bold">
+        <div className="w-48">
+          <span>Supplier,</span>
+          <div className="h-20"></div>
+          <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+        </div>
+        <div className="w-48">
+          <span>Penerima (Kasir/Staff),</span>
+          <div className="h-20"></div>
+          <span className="border-t border-slate-400 block pt-1.5">( ........................................ )</span>
+        </div>
+      </div>
     </div>
   );
 };
