@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
 import { UserCheck, Camera, MapPin, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
 
 export const AttendanceView: React.FC = () => {
   const { activeBranchId, user } = useAuth();
+  const { showToast } = useToast();
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,10 +36,10 @@ export const AttendanceView: React.FC = () => {
         latitude: -6.2088,
         longitude: 106.8456,
       });
-      alert(`Presensi Masuk Berhasil dicatat untuk ${user?.full_name}!`);
+      showToast(`Presensi Masuk Berhasil dicatat untuk ${user?.full_name}!`, 'success');
       loadLogs();
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message || 'Gagal melakukan absensi masuk', 'error');
     }
   };
 
@@ -47,10 +49,10 @@ export const AttendanceView: React.FC = () => {
         branch_id: activeBranchId,
         user_id: user?.id,
       });
-      alert(`Presensi Pulang Berhasil dicatat untuk ${user?.full_name}!`);
+      showToast(`Presensi Pulang Berhasil dicatat untuk ${user?.full_name}!`, 'success');
       loadLogs();
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message || 'Gagal melakukan absensi pulang', 'error');
     }
   };
 
