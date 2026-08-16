@@ -23,7 +23,7 @@ function calculateProductCostPrice(productId: string): number {
 // Get all products with variants, recipes, categories, and branch stock
 productsRouter.get('/', (req, res) => {
   const branch_id = (req.query.branch_id as string) || 'branch-1';
-  const products = db.get('products');
+  const products = (db.get('products') || []).filter((p: any) => p.is_deleted !== true);
   const categories = db.get('product_categories');
   const variants = db.get('product_variants');
   const recipes = db.get('product_recipes');
@@ -137,6 +137,7 @@ productsRouter.post('/', (req, res) => {
     has_variants: Boolean(has_variants),
     is_available: true,
     track_stock: track_stock !== undefined ? Boolean(track_stock) : true,
+    is_deleted: false,
     created_at: new Date().toISOString(),
   };
 
@@ -217,4 +218,14 @@ productsRouter.put('/:id', (req, res) => {
   db.update('products', (p: any) => p.id === productId, { cost_price: newCost });
 
   res.json(updated);
+});
+
+// Soft Delete product
+productsRouter.delete('/:id', (req, res) => {
+  const productId = req.params.id;
+  const prod = db.get('products').find((p: any) => p.id === productId);
+  if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+  db.update('products', (p: any) => p.id === productId, { ...prod, is_deleted: true });
+  res.json({ success: true, message: 'Produk berhasil dihapus' });
 });
