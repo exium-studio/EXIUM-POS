@@ -51,7 +51,7 @@ const MainLayout: React.FC = () => {
   const { activeReceiptId, setActiveReceiptId } = usePOS();
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#F8FAFC] font-sans overflow-hidden select-none">
+    <div className="flex flex-col h-full w-full bg-[#F8FAFC] font-sans overflow-hidden select-none">
       {/* Offline Sync Banner */}
       <OfflineSyncBanner />
 
@@ -158,7 +158,7 @@ const AppContent: React.FC = () => {
   if (isCustomerSelfOrder) {
     return (
       <POSProvider>
-        <div className="flex flex-col h-screen w-full bg-[#F8FAFC] font-sans overflow-hidden">
+        <div className="flex flex-col h-full w-full bg-[#F8FAFC] font-sans overflow-hidden">
           <CustomerQRView />
         </div>
       </POSProvider>

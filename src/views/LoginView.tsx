@@ -31,7 +31,7 @@ export const LoginView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-screen flex items-center justify-center bg-radial from-[#1E293B] via-[#0F172A] to-[#020617] text-white p-4 relative overflow-hidden font-sans">
+    <div className="h-full w-full flex items-center justify-center bg-radial from-[#1E293B] via-[#0F172A] to-[#020617] text-white p-4 relative overflow-hidden font-sans">
       {/* Background Ambient Decorative Lights */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />

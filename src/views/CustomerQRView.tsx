@@ -260,10 +260,10 @@ export const CustomerQRView: React.FC = () => {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#0F172A] flex justify-center overflow-x-hidden font-sans">
+    <div className="w-full h-full bg-[#0F172A] flex justify-center overflow-x-hidden font-sans">
       
       {/* Mobile-First Container (100% viewport on mobile, mockup frame on desktop) */}
-      <div className="w-full h-screen lg:max-w-md lg:h-[800px] lg:my-auto lg:rounded-3xl lg:shadow-2xl lg:border lg:border-slate-800 bg-[#F8FAFC] overflow-hidden flex flex-col relative">
+      <div className="w-full h-full lg:max-w-md lg:h-[800px] lg:my-auto lg:rounded-3xl lg:shadow-2xl lg:border lg:border-slate-800 bg-[#F8FAFC] overflow-hidden flex flex-col relative">
         
         {/* Header (Top Nav) */}
         <div className="bg-[#1E293B] text-white p-4 shrink-0 shadow-md">
