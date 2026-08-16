@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../lib/api';
-import { ShoppingCart, Plus, CheckCircle2, Clock, Truck, RefreshCw, Trash2, Calendar, X, Eye, FileText, Edit2, Users, BarChart3, Printer } from 'lucide-react';
+import { ShoppingCart, Plus, CheckCircle2, Clock, Truck, RefreshCw, Trash2, Calendar, X, Eye, FileText, Edit2, Users, BarChart3, Printer, Bluetooth } from 'lucide-react';
 
 export const PurchaseView: React.FC = () => {
   const { activeBranchId, user, activeBranch } = useAuth();
@@ -27,6 +27,9 @@ export const PurchaseView: React.FC = () => {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showEditSupplierModal, setShowEditSupplierModal] = useState(false);
   const [selectedPO, setSelectedPO] = useState<any>(null);
+
+  // Bluetooth Connection Status State
+  const [isBtConnected, setIsBtConnected] = useState(false);
 
   // Print Configuration States
   const [printDocType, setPrintDocType] = useState<'surat_jalan' | 'tanda_terima'>('surat_jalan');
@@ -66,6 +69,24 @@ export const PurchaseView: React.FC = () => {
   const [editSupEmail, setEditSupEmail] = useState('');
   const [editSupAddress, setEditSupAddress] = useState('');
   const [editSupTerms, setEditSupTerms] = useState(30);
+
+  // Monitor Bluetooth Status
+  useEffect(() => {
+    import('../lib/bluetoothPrinter').then(({ bluetoothPrinter }) => {
+      setIsBtConnected(bluetoothPrinter.isConnected());
+    }).catch(() => {});
+
+    const handleStatusChange = () => {
+      import('../lib/bluetoothPrinter').then(({ bluetoothPrinter }) => {
+        setIsBtConnected(bluetoothPrinter.isConnected());
+      }).catch(() => {});
+    };
+
+    window.addEventListener('bluetooth_printer_status_changed', handleStatusChange);
+    return () => {
+      window.removeEventListener('bluetooth_printer_status_changed', handleStatusChange);
+    };
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -260,6 +281,137 @@ export const PurchaseView: React.FC = () => {
     setSelectedPO(po);
     setPrintCustomTitle(''); // Reset custom title
     setShowDetailModal(true);
+  };
+
+  // Direct Bluetooth Print Helper
+  const formatPOTextForBluetooth = (
+    po: any,
+    docType: 'surat_jalan' | 'tanda_terima',
+    paperSize: 'thermal_80' | 'thermal_58',
+    customTitle: string,
+    showPrices: boolean,
+    showNotes: boolean,
+    showTax: boolean
+  ): string => {
+    const width = paperSize === 'thermal_58' ? 32 : 40;
+    
+    const center = (text: string): string => {
+      if (text.length >= width) return text.substring(0, width);
+      const pad = Math.floor((width - text.length) / 2);
+      return ' '.repeat(pad) + text;
+    };
+
+    const justify = (left: string, right: string): string => {
+      const remaining = width - left.length - right.length;
+      if (remaining <= 0) {
+        return left + ' ' + right;
+      }
+      return left + ' '.repeat(remaining) + right;
+    };
+
+    const dashed = '-'.repeat(width);
+    const line = '='.repeat(width);
+
+    const lines: string[] = [];
+
+    // Header
+    lines.push(center(activeBranch?.name?.toUpperCase() || 'OUTLET RESTO'));
+    const title = customTitle.trim() || (docType === 'surat_jalan' ? 'SURAT JALAN' : 'TANDA TERIMA');
+    lines.push(center(title.toUpperCase()));
+    lines.push(dashed);
+
+    // Info
+    lines.push(`No. PO: ${po.po_number}`);
+    lines.push(`Tanggal: ${new Date(po.created_at || Date.now()).toLocaleDateString('id-ID')}`);
+    lines.push(`Supplier: ${po.supplier_name}`);
+    lines.push(dashed);
+
+    // Items
+    if (docType === 'surat_jalan') {
+      lines.push(justify('Nama Item', showPrices ? 'Qty/Harga' : 'Qty'));
+      lines.push(dashed);
+      po.items?.forEach((it: any) => {
+        const namePart = it.item_name.substring(0, width - 12);
+        const qtyPart = `${it.quantity_ordered} ${it.unit}`;
+        if (showPrices) {
+          lines.push(namePart);
+          lines.push(justify(`  ${qtyPart}`, `Rp ${it.unit_price.toLocaleString('id-ID')}`));
+        } else {
+          lines.push(justify(namePart, qtyPart));
+        }
+      });
+    } else {
+      lines.push(justify('Nama Item', 'Qty x Harga'));
+      lines.push(dashed);
+      po.items?.forEach((it: any) => {
+        const namePart = it.item_name.substring(0, width - 12);
+        const qty = it.quantity_received || it.quantity_ordered;
+        const qtyPart = `${qty} ${it.unit}`;
+        lines.push(namePart);
+        lines.push(justify(`  ${qtyPart}`, `Rp ${it.unit_price.toLocaleString('id-ID')}`));
+      });
+      lines.push(dashed);
+
+      // Financials
+      lines.push(justify('Subtotal:', `Rp ${po.subtotal?.toLocaleString('id-ID')}`));
+      if (showTax) {
+        lines.push(justify('Pajak (11%):', `Rp ${po.tax_amount?.toLocaleString('id-ID')}`));
+      }
+      const total = showTax ? po.total_amount : po.subtotal;
+      lines.push(line);
+      lines.push(justify('GRAND TOTAL:', `Rp ${total?.toLocaleString('id-ID')}`));
+      lines.push(line);
+    }
+
+    if (showNotes && po.notes) {
+      lines.push('');
+      lines.push('Catatan:');
+      let noteText = po.notes;
+      while (noteText.length > 0) {
+        lines.push(noteText.substring(0, width));
+        noteText = noteText.substring(width);
+      }
+    }
+
+    // Signatures
+    lines.push('');
+    lines.push(justify('Pengirim', 'Penerima'));
+    lines.push('');
+    lines.push('');
+    lines.push(justify('(.........)', '(.........)'));
+
+    return lines.join('\n');
+  };
+
+  const handlePrintDocument = async () => {
+    if (printPaperSize === 'a4') {
+      window.print();
+    } else {
+      // Thermal printer size - attempt direct Bluetooth printing
+      try {
+        const { bluetoothPrinter } = await import('../lib/bluetoothPrinter');
+        if (bluetoothPrinter.isConnected()) {
+          const text = formatPOTextForBluetooth(
+            selectedPO,
+            printDocType,
+            printPaperSize,
+            printCustomTitle,
+            printShowPrices,
+            printShowNotes,
+            printShowTax
+          );
+          await bluetoothPrinter.print(text);
+          showToast('Dokumen PO berhasil dicetak ke printer Bluetooth!', 'success');
+        } else {
+          // If Bluetooth printer is not connected
+          if (window.confirm('Printer Bluetooth tidak terhubung. Apakah Anda ingin mencetak menggunakan dialog printer browser (kertas struk)?')) {
+            window.print();
+          }
+        }
+      } catch (err: any) {
+        showToast(err.message || 'Gagal mencetak langsung', 'error');
+      }
+    }
   };
 
   return (
@@ -698,179 +850,170 @@ export const PurchaseView: React.FC = () => {
         </div>
       )}
 
-      {/* ==================== MODAL: DETAIL PO ==================== */}
+      {/* ==================== MODAL: DETAIL PO & LIVE PREVIEW ==================== */}
       {showDetailModal && selectedPO && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h5 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
-                <FileText className="w-5 h-5 text-blue-600" />
-                <span>Detail Purchase Order: {selectedPO.po_number}</span>
-              </h5>
-              <button onClick={() => setShowDetailModal(false)} className="text-slate-400 hover:text-slate-900 font-bold text-sm cursor-pointer">✕</button>
-            </div>
+          <div className="bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 flex flex-col md:flex-row max-h-[90vh]">
             
-            <div className="p-6 space-y-4 text-xs font-semibold text-slate-700">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="block text-[10px] text-gray-400">SUPPLIER</span>
-                  <span className="text-slate-900 font-black">{selectedPO.supplier_name}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-gray-400">JATUH TEMPO</span>
-                  <span className="text-slate-900 font-bold">{new Date(selectedPO.due_date).toLocaleDateString('id-ID')}</span>
-                </div>
-              </div>
-
-              <div>
-                <span className="block text-[10px] text-gray-400">CATATAN</span>
-                <span className="text-slate-900">{selectedPO.notes || '-'}</span>
-              </div>
-
-              <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                <table className="w-full text-left text-[11px]">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-500 font-bold">
-                      <th className="p-2.5">Nama Bahan</th>
-                      <th className="p-2.5 text-center">Qty Dipesan</th>
-                      <th className="p-2.5 text-center">Qty Diterima</th>
-                      <th className="p-2.5 text-right">Harga Unit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700 font-bold">
-                    {selectedPO.items?.map((it: any) => (
-                      <tr key={it.id}>
-                        <td className="p-2.5">{it.item_name}</td>
-                        <td className="p-2.5 text-center">{it.quantity_ordered} {it.unit}</td>
-                        <td className="p-2.5 text-center">{it.quantity_received} {it.unit}</td>
-                        <td className="p-2.5 text-right">Rp {it.unit_price?.toLocaleString('id-ID')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="border-t border-slate-100 pt-3 flex flex-col items-end gap-1 font-bold">
-                <div className="flex justify-between w-full text-[11px] text-slate-500">
-                  <span>Subtotal:</span>
-                  <span>Rp {selectedPO.subtotal?.toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between w-full text-[11px] text-slate-500">
-                  <span>Pajak (11%):</span>
-                  <span>Rp {selectedPO.tax_amount?.toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between w-full text-sm text-slate-950 font-black pt-1 border-t border-slate-100">
-                  <span>Total PO:</span>
-                  <span>Rp {selectedPO.total_amount?.toLocaleString('id-ID')}</span>
+            {/* KIRI: LIVE DOCUMENT PREVIEW AREA */}
+            <div className="flex-1 bg-slate-100 p-6 flex flex-col items-center justify-start overflow-y-auto border-r border-slate-200 max-h-[45vh] md:max-h-full">
+              <span className="block font-black text-slate-500 text-[10px] mb-3 self-start uppercase tracking-wider flex items-center gap-1.5">
+                <Eye className="w-4 h-4" />
+                Live Preview Dokumen
+              </span>
+              
+              {/* Paper Sheet Simulator Container */}
+              <div className="w-full flex justify-center">
+                <div className={`bg-white shadow-lg text-slate-800 p-6 border border-slate-300 rounded-xs select-none transition-all ${
+                  printPaperSize === 'a4' 
+                    ? 'w-full max-w-[420px] text-[10px]' 
+                    : printPaperSize === 'thermal_80'
+                    ? 'w-[80mm] text-[9px] font-mono'
+                    : 'w-[58mm] text-[8px] font-mono'
+                }`}>
+                  {printDocType === 'surat_jalan' ? (
+                    <SuratJalanPrintTemplate 
+                      po={selectedPO} 
+                      branch={activeBranch} 
+                      size={printPaperSize}
+                      customTitle={printCustomTitle}
+                      showPrices={printShowPrices}
+                      showNotes={printShowNotes}
+                      showSignatures={printShowSignatures}
+                    />
+                  ) : (
+                    <TandaTeimaPrintTemplate 
+                      po={selectedPO} 
+                      branch={activeBranch} 
+                      size={printPaperSize}
+                      customTitle={printCustomTitle}
+                      showNotes={printShowNotes}
+                      showSignatures={printShowSignatures}
+                      showTax={printShowTax}
+                    />
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* Opsi Cetak Surat Pembelian (Kustomisasi) */}
-              <div className="border-t border-slate-100 pt-4 space-y-3">
-                <span className="block font-black text-slate-800 text-[11px] flex items-center gap-1">
-                  <Printer className="w-3.5 h-3.5 text-blue-600" />
-                  Kustomisasi Cetak Surat / Tanda Terima
-                </span>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* KANAN: CONFIGURATION & ACTIONS PANEL */}
+            <div className="w-full md:w-[350px] p-6 flex flex-col justify-between overflow-y-auto bg-white max-h-[45vh] md:max-h-full">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h5 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                    <Printer className="w-5 h-5 text-blue-600" />
+                    <span>Pengaturan Cetak</span>
+                  </h5>
+                  {isBtConnected && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-black flex items-center gap-1">
+                      <Bluetooth className="w-2.5 h-2.5" />
+                      Connected
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-3.5 text-xs">
                   <div>
                     <label className="block font-bold text-gray-500 mb-1">Jenis Dokumen:</label>
                     <select
                       value={printDocType}
                       onChange={(e) => setPrintDocType(e.target.value as any)}
-                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl font-bold cursor-pointer focus:outline-none"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold cursor-pointer focus:outline-none"
                     >
                       <option value="surat_jalan">Surat Jalan (Waybill)</option>
-                      <option value="tanda_terima">Tanda Terima (Ack Receipt)</option>
+                      <option value="tanda_terima">Tanda Terima (Receipt)</option>
                     </select>
                   </div>
+
                   <div>
-                    <label className="block font-bold text-gray-500 mb-1">Kertas Cetak:</label>
+                    <label className="block font-bold text-gray-500 mb-1">Ukuran Kertas:</label>
                     <select
                       value={printPaperSize}
                       onChange={(e) => setPrintPaperSize(e.target.value as any)}
-                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl font-bold cursor-pointer focus:outline-none"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold cursor-pointer focus:outline-none"
                     >
                       <option value="a4">Kertas A4 / PDF</option>
-                      <option value="thermal_80">Kertas Struk (80mm)</option>
-                      <option value="thermal_58">Kertas Struk (58mm)</option>
+                      <option value="thermal_80">Kertas Struk 80mm</option>
+                      <option value="thermal_58">Kertas Struk 58mm</option>
                     </select>
                   </div>
+
                   <div>
-                    <label className="block font-bold text-gray-500 mb-1">Judul Kustom (Opsional):</label>
+                    <label className="block font-bold text-gray-500 mb-1">Judul Kustom:</label>
                     <input
                       type="text"
                       value={printCustomTitle}
                       onChange={(e) => setPrintCustomTitle(e.target.value)}
-                      placeholder="Masukkan judul khusus..."
-                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl font-medium focus:outline-none focus:bg-white"
+                      placeholder="Judul bawaan..."
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-medium focus:outline-none focus:bg-white"
                     />
                   </div>
                 </div>
 
                 {/* Checkboxes layout settings */}
-                <div className="bg-slate-50 p-3 rounded-2xl grid grid-cols-2 md:grid-cols-4 gap-2 font-bold text-slate-600 text-[10px]">
+                <div className="border border-slate-100 p-3 rounded-2xl bg-slate-50/50 space-y-2.5 font-bold text-slate-600 text-[10px]">
+                  <span className="block text-[9px] uppercase tracking-wider text-gray-400">Atur Komponen Tampilan</span>
                   {printDocType === 'surat_jalan' && (
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={printShowPrices}
                         onChange={(e) => setPrintShowPrices(e.target.checked)}
+                        className="rounded text-blue-600 focus:ring-blue-500"
                       />
-                      <span>Tampilkan Harga</span>
+                      <span>Tampilkan Nilai Harga</span>
                     </label>
                   )}
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={printShowNotes}
                       onChange={(e) => setPrintShowNotes(e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500"
                     />
-                    <span>Tampilkan Catatan</span>
+                    <span>Tampilkan Catatan PO</span>
                   </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={printShowSignatures}
                       onChange={(e) => setPrintShowSignatures(e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500"
                     />
-                    <span>Kolom Ttd</span>
+                    <span>Tampilkan Kolom Ttd</span>
                   </label>
                   {printDocType === 'tanda_terima' && (
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={printShowTax}
                         onChange={(e) => setPrintShowTax(e.target.checked)}
+                        className="rounded text-blue-600 focus:ring-blue-500"
                       />
-                      <span>Tampilkan Pajak</span>
+                      <span>Tampilkan PPN 11%</span>
                     </label>
                   )}
                 </div>
-
-                <div className="pt-2 flex justify-between items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTimeout(() => {
-                        window.print();
-                      }, 150);
-                    }}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    Cetak Dokumen
-                  </button>
-                  <button
-                    onClick={() => setShowDetailModal(false)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
-                  >
-                    Tutup
-                  </button>
-                </div>
               </div>
 
+              <div className="pt-6 border-t border-slate-100 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintDocument}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>{printPaperSize === 'a4' ? 'Cetak via Browser (A4)' : isBtConnected ? 'Cetak Langsung (Bluetooth)' : 'Cetak via Browser (Struk)'}</span>
+                </button>
+                <button
+                  onClick={() => setShowDetailModal(false)}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer text-center text-xs"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
+
           </div>
         </div>
       )}
