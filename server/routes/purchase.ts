@@ -5,24 +5,81 @@ import crypto from 'crypto';
 
 export const purchaseRouter = Router();
 
-// Suppliers
+// Suppliers List (Exclude soft-deleted)
 purchaseRouter.get('/suppliers', (req, res) => {
-  res.json(db.get('suppliers'));
+  const sups = (db.get('suppliers') || []).filter((s: any) => s.is_deleted !== true);
+  res.json(sups);
 });
 
+// Supplier Stats
+purchaseRouter.get('/suppliers/stats', (req, res) => {
+  const suppliers = (db.get('suppliers') || []).filter((s: any) => s.is_deleted !== true);
+  const pos = db.get('purchase_orders') || [];
+
+  const stats = suppliers.map((s: any) => {
+    const supplierPOs = pos.filter((p: any) => p.supplier_id === s.id);
+    const totalSpent = supplierPOs
+      .filter((p: any) => p.status === 'received_full')
+      .reduce((sum: number, p: any) => sum + (p.total_amount || 0), 0);
+    
+    return {
+      supplier_id: s.id,
+      supplier_name: s.name,
+      contact_person: s.contact_person,
+      phone: s.phone,
+      po_count: supplierPOs.length,
+      total_spent: totalSpent,
+    };
+  });
+
+  res.json(stats);
+});
+
+// Create Supplier
 purchaseRouter.post('/suppliers', (req, res) => {
+  const { name, contact_person, phone, email, address, payment_terms_days } = req.body;
   const newSupplier = {
     id: `sup-${crypto.randomUUID()}`,
-    name: req.body.name,
-    contact_person: req.body.contact_person,
-    phone: req.body.phone,
-    email: req.body.email,
-    address: req.body.address,
-    payment_terms_days: Number(req.body.payment_terms_days) || 30,
+    name,
+    contact_person,
+    phone,
+    email: email || '',
+    address: address || '',
+    payment_terms_days: Number(payment_terms_days) || 30,
+    is_deleted: false,
     created_at: new Date().toISOString(),
   };
   db.insert('suppliers', newSupplier);
   res.json(newSupplier);
+});
+
+// Update Supplier
+purchaseRouter.put('/suppliers/:id', (req, res) => {
+  const id = req.params.id;
+  const supplier = db.get('suppliers').find((s: any) => s.id === id);
+  if (!supplier) return res.status(404).json({ error: 'Supplier tidak ditemukan' });
+
+  const updates = {
+    name: req.body.name !== undefined ? req.body.name : supplier.name,
+    contact_person: req.body.contact_person !== undefined ? req.body.contact_person : supplier.contact_person,
+    phone: req.body.phone !== undefined ? req.body.phone : supplier.phone,
+    email: req.body.email !== undefined ? req.body.email : supplier.email,
+    address: req.body.address !== undefined ? req.body.address : supplier.address,
+    payment_terms_days: req.body.payment_terms_days !== undefined ? Number(req.body.payment_terms_days) : supplier.payment_terms_days,
+  };
+
+  db.update('suppliers', (s: any) => s.id === id, updates);
+  res.json({ ...supplier, ...updates });
+});
+
+// Soft Delete Supplier
+purchaseRouter.delete('/suppliers/:id', (req, res) => {
+  const id = req.params.id;
+  const supplier = db.get('suppliers').find((s: any) => s.id === id);
+  if (!supplier) return res.status(404).json({ error: 'Supplier tidak ditemukan' });
+
+  db.update('suppliers', (s: any) => s.id === id, { ...supplier, is_deleted: true });
+  res.json({ success: true, message: 'Supplier berhasil dihapus' });
 });
 
 // Purchase Orders list with Date Filters
